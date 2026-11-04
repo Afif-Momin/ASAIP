@@ -51,8 +51,8 @@ def _architecture_diagram(architecture: Architecture) -> Drawing:
         drawing.add(Line(x1 + 38, y1, x2 + 38, y2, strokeColor=colors.HexColor("#64748B"), strokeWidth=0.8))
     for node in nodes:
         x, y = xy(node["id"])
-        drawing.add(Rect(x, y - 14, 82, 30, rx=4, ry=4, fillColor=colors.HexColor("#E0E7FF"), strokeColor=colors.HexColor("#4F46E5")))
-        drawing.add(String(x + 41, y + 3, str(node["label"])[:20], textAnchor="middle", fontSize=6.2, fillColor=colors.HexColor("#1E1B4B")))
+        drawing.add(Rect(x, y - 14, 82, 30, rx=4, ry=4, fillColor=colors.HexColor("#E7EFF4"), strokeColor=colors.HexColor("#276582")))
+        drawing.add(String(x + 41, y + 3, str(node["label"])[:20], textAnchor="middle", fontSize=6.2, fillColor=colors.HexColor("#1D2B38")))
         drawing.add(String(x + 41, y - 7, str(node["type"])[:20], textAnchor="middle", fontSize=5.5, fillColor=colors.HexColor("#475569")))
     drawing.add(String(12, 10, f"Rendered from {len(nodes)} components and {len(architecture.diagram.get('edges', []))} connections", fontSize=6.5, fillColor=colors.HexColor("#64748B")))
     return drawing
@@ -71,9 +71,9 @@ def generate_pdf_report(
         subject="Explainable software architecture decision report",
     )
     styles = getSampleStyleSheet()
-    title = ParagraphStyle("ReportTitle", parent=styles["Title"], textColor=colors.HexColor("#312E81"), fontSize=22, leading=28, alignment=TA_CENTER, spaceAfter=16)
-    heading = ParagraphStyle("Section", parent=styles["Heading1"], textColor=colors.HexColor("#3730A3"), fontSize=14, leading=18, spaceBefore=12, spaceAfter=7, keepWithNext=True)
-    subheading = ParagraphStyle("Subsection", parent=styles["Heading2"], textColor=colors.HexColor("#0F766E"), fontSize=10.5, leading=14, spaceBefore=8, spaceAfter=4, keepWithNext=True)
+    title = ParagraphStyle("ReportTitle", parent=styles["Title"], textColor=colors.HexColor("#1d2b38"), fontSize=22, leading=28, alignment=TA_CENTER, spaceAfter=16)
+    heading = ParagraphStyle("Section", parent=styles["Heading1"], textColor=colors.HexColor("#276582"), fontSize=14, leading=18, spaceBefore=12, spaceAfter=7, keepWithNext=True)
+    subheading = ParagraphStyle("Subsection", parent=styles["Heading2"], textColor=colors.HexColor("#2c7a7b"), fontSize=10.5, leading=14, spaceBefore=8, spaceAfter=4, keepWithNext=True)
     body = ParagraphStyle("Body", parent=styles["BodyText"], fontSize=8.7, leading=12.5, spaceAfter=5)
     bullet = ParagraphStyle("Bullet", parent=body, leftIndent=12, firstLineIndent=-7, bulletIndent=3, spaceAfter=3)
     small = ParagraphStyle("Small", parent=body, fontSize=7.3, leading=9.5)
@@ -97,8 +97,8 @@ def generate_pdf_report(
         converted = [[Paragraph(_text(cell), small) for cell in row] for row in rows]
         item = Table(converted, colWidths=widths, repeatRows=1, hAlign="LEFT")
         item.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E0E7FF")),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#312E81")),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E7EFF4")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#1D2B38")),
             ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#CBD5E1")),
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
             ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F8FAFC")]),

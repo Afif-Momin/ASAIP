@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertOctagon, ArrowUpRight, CheckCircle2, ChevronDown, CircleAlert, Clock3, Component, Lightbulb, ShieldCheck, Sparkles, Wrench } from 'lucide-react';
+import { ArrowUpRight, CheckCircle2, ChevronDown, CircleAlert, Clock3, Layers, Lightbulb, ShieldCheck, Wrench } from 'lucide-react';
 import { api, getErrorMessage } from '@/services/api';
 import { useApp } from '@/context/AppContext';
 import type { CriticReview } from '@/types';
@@ -30,34 +30,62 @@ export default function CriticPage() {
     try {
       const result = await api.critic.review(selectedArchitecture.id);
       setReview(result); setExpanded(result.issues.map((_, index) => index));
-      toast(`Fresh review complete: ${result.issues.length} finding${result.issues.length === 1 ? '' : 's'}.`);
+      toast(result.issues.length ? `Review complete — ${result.issues.length} thing${result.issues.length === 1 ? '' : 's'} to look at.` : 'Review complete — nothing worth flagging.');
     } catch (err) { const message = getErrorMessage(err); setError(message); toast(message, 'error'); }
     finally { setRunning(false); }
   };
   const filtered = useMemo(() => review?.issues.filter((issue) => severity === 'All' || issue.severity.toLowerCase() === severity.toLowerCase()) || [], [review, severity]);
   const engine = engineLabel(review?.analysis_mode);
   return <ModuleState><div className="space-y-6 animate-fade-up">
-    <PageHeader eyebrow="Independent design review" title="Architecture Critic" description="Challenge the recommendation. Run a fresh review to expose failure modes, security gaps, operational risks, and unnecessary complexity—with concrete fixes." actions={<Button onClick={runReview} loading={running} disabled={!selectedArchitecture}><ShieldCheck className="h-4 w-4" />{review ? 'Run fresh review' : 'Run architecture review'}</Button>} />
+    <PageHeader eyebrow="A second opinion on your design" title="Architecture review" description="Ask ASAIP to argue against the option you selected. It looks for things that could fail in production — security gaps, single points of failure, hidden cost and needless complexity — and explains how to fix each one." actions={<Button onClick={runReview} loading={running} disabled={!selectedArchitecture}><ShieldCheck className="h-4 w-4" />{review ? 'Run another review' : 'Review this architecture'}</Button>} />
     <WorkspaceSelectors />
-    {error && <ErrorState title="Architecture review failed" message={error} onRetry={runReview} />}
-    {!review && !running && <EmptyState icon={<ShieldCheck className="h-5 w-5" />} title={`Review ${selectedArchitecture?.name || 'this architecture'}`} description="The critic evaluates the selected architecture on demand. Findings are not prefilled or inferred in the browser; run a review to retrieve actual backend analysis." action={<Button onClick={runReview}><Sparkles className="h-4 w-4" />Run architecture review</Button>} />}
-    {running && <section className="flex min-h-72 flex-col items-center justify-center rounded-xl border border-white/[0.075] bg-card text-center" role="status"><div className="h-10 w-10 animate-spin rounded-full border-2 border-slate-800 border-t-indigo-400" /><h2 className="mt-5 text-sm font-semibold text-slate-300">Challenging the design…</h2><p className="mt-2 max-w-md text-xs leading-5 text-slate-600">Inspecting components and strategies for reliability, security, scalability, cost, and maintainability risks.</p></section>}
+    {error && <ErrorState title="The review did not finish" message={error} onRetry={runReview} />}
+    {!review && !running && <EmptyState icon={<ShieldCheck className="h-5 w-5" />} title={`Have ${selectedArchitecture?.name || 'this architecture'} challenged`} description="Nothing is guessed in the browser — press the button and ASAIP runs a real review against the backend for the architecture you selected." action={<Button onClick={runReview}><ShieldCheck className="h-4 w-4" />Review this architecture</Button>} />}
+    {running && <section className="flex min-h-72 flex-col items-center justify-center rounded-xl border bg-card text-center" role="status"><div className="h-9 w-9 animate-spin rounded-full border-2 border-slate-200 border-t-primary" /><h2 className="mt-5 text-[15px] font-semibold text-foreground">Looking for what could go wrong…</h2><p className="mt-2 max-w-md text-[14px] leading-6 text-muted-foreground">Checking reliability, security, scalability, cost and maintainability across every component in the design.</p></section>}
     {review && !running && <>
-      <section className="grid gap-5 rounded-xl border border-white/[0.075] bg-card p-5 shadow-card md:grid-cols-[auto_1fr] md:items-center sm:p-6">
-        <div className="flex justify-center"><ScoreRing value={review.risk_score} label="Risk / 100" size="lg" tone="risk" /></div>
-        <div><div className="flex flex-wrap items-center gap-2"><Badge tone={review.risk_score >= 70 ? 'rose' : review.risk_score >= 40 ? 'amber' : 'green'}>{review.risk_score >= 70 ? 'Elevated design risk' : review.risk_score >= 40 ? 'Moderate design risk' : 'Managed design risk'}</Badge><Badge tone={engine.tone === 'demo' ? 'cyan' : engine.tone === 'ai' ? 'violet' : 'default'}>{engine.label}</Badge></div><h2 className="mt-4 font-display text-base font-semibold text-slate-200">Review summary</h2><p className="mt-2 max-w-4xl text-xs leading-6 text-slate-400">{review.summary}</p><p className="mt-3 flex items-center gap-1.5 text-[10px] text-slate-600"><Clock3 className="h-3 w-3" />Reviewed {formatDateTime(review.reviewed_at)} · {review.issues.length} findings</p></div>
+      <section className="panel grid gap-5 p-5 md:grid-cols-[auto_1fr] md:items-center sm:p-6">
+        <div className="flex justify-center"><ScoreRing value={review.risk_score} label="Risk out of 100" size="lg" tone="risk" /></div>
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone={review.risk_score >= 70 ? 'rose' : review.risk_score >= 40 ? 'amber' : 'green'}>{review.risk_score >= 70 ? 'Worth taking seriously before you build' : review.risk_score >= 40 ? 'Some things to sort out' : 'Risk looks manageable'}</Badge>
+            <Badge tone={engine.tone === 'ai' ? 'violet' : engine.tone === 'demo' ? 'cyan' : 'default'}>{engine.label}</Badge>
+          </div>
+          <h2 className="mt-4 text-[16px] font-semibold text-foreground">In plain words</h2>
+          <p className="mt-2 max-w-4xl text-[14px] leading-6 text-slate-700">{review.summary}</p>
+          <p className="mt-3 flex items-center gap-1.5 text-[13px] text-muted-foreground"><Clock3 className="h-4 w-4" />Reviewed {formatDateTime(review.reviewed_at)} · {review.issues.length} finding{review.issues.length === 1 ? '' : 's'}</p>
+        </div>
       </section>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{severities.slice(1).map((level) => { const count = review.issues.filter((issue) => issue.severity.toLowerCase() === level.toLowerCase()).length; return <button key={level} onClick={() => setSeverity(severity === level ? 'All' : level)} className={`rounded-xl border p-4 text-left transition ${severity === level ? 'border-indigo-500/35 bg-indigo-500/[0.06]' : 'border-white/[0.07] bg-card hover:border-white/[0.14]'}`}><div className="flex items-center justify-between"><SeverityBadge severity={level} /><span className="font-display text-xl font-semibold text-slate-200">{count}</span></div><p className="mt-2 text-[9px] text-slate-600">{count ? `Show ${level.toLowerCase()} priority findings` : `No ${level.toLowerCase()} findings`}</p></button>; })}</div>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-display text-sm font-semibold text-slate-200">Actionable findings</h2><p className="mt-1 text-[10px] text-slate-600">Every issue includes impact, remediation, and expected improvement.</p></div><div className="flex gap-1 overflow-x-auto rounded-lg border border-white/[0.07] p-1">{severities.map((item) => <button key={item} onClick={() => setSeverity(item)} className={`rounded-md px-3 py-1.5 text-[10px] font-medium ${severity === item ? 'bg-slate-800 text-slate-200' : 'text-slate-600 hover:text-slate-300'}`}>{item}</button>)}</div></div>
-      {!filtered.length ? <EmptyState icon={<CheckCircle2 className="h-5 w-5" />} title={`No ${severity.toLowerCase()} findings`} description="The fresh review did not identify issues at this severity. Choose another filter to inspect the remaining findings." action={<Button variant="outline" onClick={() => setSeverity('All')}>Show all findings</Button>} /> : <div className="space-y-3">{filtered.map((issue) => {
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{severities.slice(1).map((level) => { const count = review.issues.filter((issue) => issue.severity.toLowerCase() === level.toLowerCase()).length; return <button key={level} onClick={() => setSeverity(severity === level ? 'All' : level)} aria-pressed={severity === level} className={`rounded-xl border p-4 text-left transition ${severity === level ? 'border-primary/40 bg-primary/[0.05] shadow-card' : 'border-border bg-card hover:border-slate-300'}`}>
+        <div className="flex items-center justify-between"><SeverityBadge severity={level} /><span className="text-[22px] font-semibold leading-none text-foreground">{count}</span></div>
+        <p className="mt-2.5 text-[13px] text-muted-foreground">{count ? `Show only ${level.toLowerCase()} findings` : `No ${level.toLowerCase()} findings`}</p>
+      </button>; })}</div>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div><h2 className="section-title">What to look at</h2><p className="section-hint">Each finding explains the problem, why it matters, and what to do about it.</p></div>
+        <div className="flex gap-1 overflow-x-auto rounded-lg border bg-muted/40 p-1">{severities.map((item) => <button key={item} onClick={() => setSeverity(item)} aria-pressed={severity === item} className={`whitespace-nowrap rounded-md px-3 py-1.5 text-[13px] font-medium ${severity === item ? 'bg-white text-foreground shadow-card' : 'text-muted-foreground hover:text-foreground'}`}>{item === 'All' ? 'All findings' : item}</button>)}</div>
+      </div>
+
+      {!filtered.length ? <EmptyState icon={<CheckCircle2 className="h-5 w-5" />} title={`No ${severity.toLowerCase()} findings`} description="This review did not flag anything at that level. Choose another filter to see the rest." action={<Button variant="outline" onClick={() => setSeverity('All')}>Show all findings</Button>} /> : <div className="space-y-3">{filtered.map((issue) => {
         const originalIndex = review.issues.indexOf(issue);
         const isOpen = expanded.includes(originalIndex);
-        return <article key={`${originalIndex}-${issue.title}`} className="overflow-hidden rounded-xl border border-white/[0.075] bg-card shadow-card">
-          <button className="flex w-full items-start gap-3 p-5 text-left hover:bg-white/[0.015] sm:items-center" onClick={() => setExpanded((current) => isOpen ? current.filter((index) => index !== originalIndex) : [...current, originalIndex])} aria-expanded={isOpen}>
-            <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg sm:mt-0 ${issue.severity.toLowerCase() === 'critical' || issue.severity.toLowerCase() === 'high' ? 'bg-rose-500/10 text-rose-400' : 'bg-amber-500/10 text-amber-400'}`}><AlertOctagon className="h-4 w-4" /></span>
-            <span className="min-w-0 flex-1"><span className="flex flex-wrap items-center gap-2"><span className="text-xs font-semibold text-slate-200">{issue.title}</span><SeverityBadge severity={issue.severity} /></span><span className="mt-1.5 flex items-center gap-1.5 text-[10px] text-slate-600"><Component className="h-3 w-3" />{issue.affected_component}</span></span><ChevronDown className={`h-4 w-4 shrink-0 text-slate-600 transition ${isOpen ? 'rotate-180' : ''}`} />
+        const serious = ['critical', 'high'].includes(issue.severity.toLowerCase());
+        return <article key={`${originalIndex}-${issue.title}`} className="panel overflow-hidden">
+          <button className="flex w-full items-start gap-3 p-5 text-left hover:bg-muted/30 sm:items-center" onClick={() => setExpanded((current) => isOpen ? current.filter((index) => index !== originalIndex) : [...current, originalIndex])} aria-expanded={isOpen}>
+            <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg sm:mt-0 ${serious ? 'bg-red-100 text-danger' : 'bg-amber-100 text-warning'}`}><CircleAlert className="h-4 w-4" /></span>
+            <span className="min-w-0 flex-1"><span className="flex flex-wrap items-center gap-2"><span className="text-[15px] font-semibold text-foreground">{issue.title}</span><SeverityBadge severity={issue.severity} /></span><span className="mt-1.5 flex items-center gap-1.5 text-[13px] text-muted-foreground"><Layers className="h-4 w-4" />{issue.affected_component}</span></span>
+            <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition ${isOpen ? 'rotate-180' : ''}`} />
           </button>
-          {isOpen && <div className="border-t border-white/[0.06] px-5 py-5 animate-fade-in"><div className="grid gap-5 lg:grid-cols-2"><Finding icon={<CircleAlert className="h-3.5 w-3.5" />} title="What the critic found" text={issue.explanation} /><Finding icon={<ArrowUpRight className="h-3.5 w-3.5" />} title="Why it matters" text={issue.why_it_matters} /></div><div className="mt-5 grid gap-4 rounded-lg border border-emerald-500/10 bg-emerald-500/[0.025] p-4 lg:grid-cols-2"><Finding icon={<Wrench className="h-3.5 w-3.5" />} title="Recommended fix" text={issue.recommended_fix} /><Finding icon={<Lightbulb className="h-3.5 w-3.5" />} title="Expected improvement" text={issue.expected_improvement} /></div></div>}
+          {isOpen && <div className="divider border-t bg-muted/20 px-5 py-5 animate-fade-in">
+            <div className="grid gap-5 lg:grid-cols-2">
+              <Finding icon={<CircleAlert className="h-4 w-4" />} title="What we found" text={issue.explanation} />
+              <Finding icon={<ArrowUpRight className="h-4 w-4" />} title="Why it matters" text={issue.why_it_matters} />
+            </div>
+            <div className="mt-5 grid gap-5 rounded-lg border border-primary/20 bg-white p-4 lg:grid-cols-2">
+              <Finding icon={<Wrench className="h-4 w-4" />} title="What to do about it" text={issue.recommended_fix} />
+              <Finding icon={<Lightbulb className="h-4 w-4" />} title="What you gain by fixing it" text={issue.expected_improvement} />
+            </div>
+          </div>}
         </article>;
       })}</div>}
     </>}
@@ -68,5 +96,5 @@ function SeverityBadge({ severity }: { severity: string }) {
   return <Badge tone={normalized === 'critical' || normalized === 'high' ? 'rose' : normalized === 'medium' ? 'amber' : 'default'}>{severity}</Badge>;
 }
 function Finding({ icon, title, text }: { icon: React.ReactNode; title: string; text: string }) {
-  return <div><h3 className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">{icon}{title}</h3><p className="mt-2 text-[11px] leading-5 text-slate-400">{text}</p></div>;
+  return <div><h3 className="flex items-center gap-2 text-[13px] font-semibold text-foreground">{icon}{title}</h3><p className="mt-1.5 text-[14px] leading-6 text-slate-700">{text}</p></div>;
 }

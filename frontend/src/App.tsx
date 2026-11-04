@@ -16,7 +16,13 @@ import SettingsPage from '@/pages/SettingsPage';
 
 function NotFoundPage() {
   const navigate = useNavigate();
-  return <div className="flex min-h-[60vh] flex-col items-center justify-center text-center"><div className="rounded-2xl border border-white/[0.07] bg-card p-3 text-slate-500"><Compass className="h-6 w-6" /></div><p className="mt-5 text-[10px] font-semibold uppercase tracking-[0.16em] text-indigo-400">404 · Route not found</p><h1 className="mt-2 font-display text-2xl font-semibold text-slate-200">This workspace doesn’t exist.</h1><p className="mt-2 text-xs text-slate-600">Return to the architecture intelligence overview.</p><Button className="mt-5" variant="outline" onClick={() => navigate('/')}><ArrowLeft className="h-4 w-4" />Back to overview</Button></div>;
+  return <div className="flex min-h-[60vh] flex-col items-center justify-center text-center">
+    <div className="rounded-2xl border bg-muted/50 p-4 text-slate-500"><Compass className="h-7 w-7" /></div>
+    <p className="mt-6 text-[13px] font-semibold uppercase tracking-wide text-primary">Page not found</p>
+    <h1 className="mt-2 text-[22px] font-semibold text-foreground">There is nothing at this address.</h1>
+    <p className="mt-2 max-w-md text-[14px] leading-6 text-muted-foreground">The link may be out of date, or the page was renamed. Your projects are safe — start again from the overview.</p>
+    <Button className="mt-6" variant="outline" onClick={() => navigate('/')}><ArrowLeft className="h-4 w-4" />Back to the overview</Button>
+  </div>;
 }
 
 export default function App() {

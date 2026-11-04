@@ -23,10 +23,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       <div className="pointer-events-none fixed bottom-4 right-4 z-[200] flex w-[calc(100%-2rem)] max-w-sm flex-col gap-2" aria-live="polite" aria-atomic="false">
         {toasts.map((item) => {
           const Icon = item.tone === 'success' ? CheckCircle2 : item.tone === 'error' ? CircleAlert : Info;
-          return <div key={item.id} className={cn('pointer-events-auto flex items-start gap-3 rounded-xl border bg-[#121823]/95 p-3.5 text-xs text-slate-200 shadow-2xl backdrop-blur-md animate-slide-in', item.tone === 'success' ? 'border-emerald-500/25' : item.tone === 'error' ? 'border-rose-500/25' : 'border-indigo-500/25')} role={item.tone === 'error' ? 'alert' : 'status'}>
-            <Icon className={cn('mt-0.5 h-4 w-4 shrink-0', item.tone === 'success' ? 'text-emerald-400' : item.tone === 'error' ? 'text-rose-400' : 'text-indigo-400')} />
-            <p className="flex-1 leading-5">{item.message}</p>
-            <button onClick={() => dismiss(item.id)} className="rounded p-0.5 text-slate-500 hover:bg-white/5 hover:text-white focus:outline-none focus:ring-1 focus:ring-indigo-400" aria-label="Dismiss notification"><X className="h-3.5 w-3.5" /></button>
+          return <div key={item.id} className={cn('pointer-events-auto flex items-start gap-3 rounded-xl border bg-card p-3.5 text-[14px] text-foreground shadow-raised animate-slide-in', item.tone === 'success' ? 'border-emerald-600/30' : item.tone === 'error' ? 'border-red-600/30' : 'border-primary/30')} role={item.tone === 'error' ? 'alert' : 'status'}>
+            <Icon className={cn('mt-0.5 h-4 w-4 shrink-0', item.tone === 'success' ? 'text-success' : item.tone === 'error' ? 'text-danger' : 'text-primary')} />
+            <p className="flex-1 leading-6">{item.message}</p>
+            <button onClick={() => dismiss(item.id)} className="rounded p-0.5 text-slate-500 hover:bg-slate-100 hover:text-foreground focus:outline-none focus:ring-1 focus:ring-primary" aria-label="Dismiss notification"><X className="h-3.5 w-3.5" /></button>
           </div>;
         })}
       </div>

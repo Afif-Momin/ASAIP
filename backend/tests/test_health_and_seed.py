@@ -10,10 +10,13 @@ def test_health_config_and_fully_analyzed_demo(client):
     assert health.status_code == 200
     assert health.json()["status"] == "ok"
     config = client.get("/api/config").json()
-    assert config == {
-        "analysis_mode": "demo", "ai_configured": False, "ai_model": None,
-        "currency": "INR", "supported_providers": ["AWS", "Azure", "GCP"],
-    }
+    assert config["analysis_mode"] == "demo"
+    assert config["ai_provider"] == "demo"
+    assert config["ai_configured"] is False
+    assert config["ai_model"] is None
+    assert config["provider_error"] is None
+    assert config["currency"] == "INR"
+    assert config["supported_providers"] == ["AWS", "Azure", "GCP"]
     projects = client.get("/api/projects").json()
     demo = next(project for project in projects if project["name"] == DEMO_PROJECT_NAME)
     assert demo["requirements_analysis"]["analysis_mode"] == "demo"

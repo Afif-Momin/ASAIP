@@ -10,6 +10,10 @@ def _unique(items: list[str]) -> list[str]:
     return list(dict.fromkeys(item.strip() for item in items if item and item.strip()))
 
 
+def _article(word: str) -> str:
+    return "an" if word[:1].lower() in "aeiou" else "a"
+
+
 def _description_requirements(project: Project) -> list[str]:
     text = project.description.lower()
     capabilities = {
@@ -89,7 +93,7 @@ def analyze_requirements(project: Project) -> RequirementsAnalysis:
         risks.append("The stated budget constrains redundant managed infrastructure and always-on capacity")
 
     summary = (
-        f"{project.name} is a {project.domain} system for {project.target_users}. It needs "
+        f"{project.name} is {_article(project.domain)} {project.domain} system for {project.target_users}. It needs "
         f"{len(functional)} identified functional capability groups, {project.concurrent_users:,}-user "
         f"concurrency, {project.availability} availability, and a deployment aligned with "
         f"{project.cloud_provider}. Architecture selection should balance the team's {project.team_size}-person "

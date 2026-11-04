@@ -33,7 +33,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(
     title="ASAIP — AI Software Architecture Intelligence Platform",
-    description="Explainable, cost-aware architecture analysis with an optional Anthropic provider and deterministic demo engines.",
+    description="Explainable, cost-aware architecture analysis with optional OpenRouter/Anthropic providers and deterministic demo engines.",
     version=__version__,
     lifespan=lifespan,
 )

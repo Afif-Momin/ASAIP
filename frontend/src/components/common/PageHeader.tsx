@@ -5,9 +5,9 @@ export function PageHeader({ eyebrow, title, description, actions }: {
 }) {
   return <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
     <div className="max-w-3xl">
-      {eyebrow && <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-indigo-400">{eyebrow}</p>}
-      <h1 className="font-display text-[25px] font-semibold leading-tight tracking-[-0.035em] text-slate-100 sm:text-[28px]">{title}</h1>
-      <p className="mt-2 text-[13px] leading-6 text-slate-500">{description}</p>
+      {eyebrow && <p className="mb-1.5 text-[13px] font-medium text-primary">{eyebrow}</p>}
+      <h1 className="text-balance text-[24px] font-semibold leading-tight text-foreground sm:text-[26px]">{title}</h1>
+      <p className="mt-2 text-[15px] leading-6 text-muted-foreground">{description}</p>
     </div>
     {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
   </header>;

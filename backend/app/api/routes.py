@@ -8,7 +8,6 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from .. import __version__
-from ..config import anthropic_key, anthropic_model
 from ..database import get_db
 from ..models import Architecture, Comparison, Project
 from ..schemas import (
@@ -28,7 +27,14 @@ from ..schemas import (
     RequirementsAnalysis,
     ScalabilityAnalysis,
 )
-from ..services.ai_provider import AIProviderError, get_ai_provider
+from ..services.ai_provider import (
+    AIProvider,
+    AIProviderError,
+    active_model_name,
+    get_ai_provider,
+    provider_config_error,
+    resolve_provider_name,
+)
 from ..services.architecture_critic import review_architecture
 from ..services.architecture_generator import generate_fallback_architectures
 from ..services.cost_estimator import estimate_cost, normalize_provider
@@ -56,8 +62,15 @@ def architecture_or_404(architecture_id: int, db: Session) -> Architecture:
     return architecture
 
 
+def live_provider() -> AIProvider | None:
+    try:
+        return get_ai_provider()
+    except AIProviderError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
 def requirements_for(project: Project):
-    provider = get_ai_provider()
+    provider = live_provider()
     if provider:
         return provider.analyze_requirements(project)
     return analyze_requirements(project)
@@ -95,11 +108,14 @@ def health(db: Session = Depends(get_db)) -> HealthResponse:
 
 @router.get("/config", response_model=ConfigResponse, tags=["System"])
 def public_config() -> ConfigResponse:
-    configured = bool(anthropic_key())
+    provider_name = resolve_provider_name()
+    configuration_error = provider_config_error()
     return ConfigResponse(
-        analysis_mode="ai" if configured else "demo",
-        ai_configured=configured,
-        ai_model=anthropic_model() if configured else None,
+        analysis_mode="ai" if provider_name != "demo" and not configuration_error else "demo",
+        ai_provider=provider_name,
+        ai_configured=provider_name != "demo" and not configuration_error,
+        ai_model=active_model_name(),
+        provider_error=configuration_error,
         supported_providers=["AWS", "Azure", "GCP"],
     )
 
@@ -160,7 +176,7 @@ def analyze_project_requirements(project_id: int, db: Session = Depends(get_db))
 @router.post("/projects/{project_id}/generate-architectures", response_model=list[ArchitectureResponse], tags=["Architectures"])
 def generate_project_architectures(project_id: int, db: Session = Depends(get_db)) -> list[Architecture]:
     project = project_or_404(project_id, db)
-    provider = get_ai_provider()
+    provider = live_provider()
     try:
         analysis = (
             RequirementsAnalysis.model_validate(project.requirements_analysis)

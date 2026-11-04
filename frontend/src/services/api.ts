@@ -7,6 +7,7 @@ import type {
   CostEstimate,
   CriticReview,
   EvolutionAnalysis,
+  PlatformConfig,
   Project,
   ProjectPayload,
   RequirementsAnalysis,
@@ -22,6 +23,10 @@ export const http = axios.create({
 });
 
 export const api = {
+  system: {
+    health: async () => (await http.get<{ status: string; service: string; version: string }>('/api/health')).data,
+    config: async () => (await http.get<PlatformConfig>('/api/config')).data,
+  },
   projects: {
     list: async () => (await http.get<Project[]>('/api/projects')).data,
     get: async (id: number) => (await http.get<Project>(`/api/projects/${id}`)).data,
@@ -45,7 +50,7 @@ export const api = {
     get: async (projectId: number) =>
       (await http.get<Comparison>(`/api/projects/${projectId}/comparison`)).data,
     run: async (projectId: number, weights: ArchitectureWeights) =>
-      (await http.post<Comparison>(`/api/projects/${projectId}/compare`, { weights })).data,
+      (await http.post<Comparison>(`/api/projects/${projectId}/compare`, weights)).data,
   },
   critic: {
     review: async (architectureId: number) =>

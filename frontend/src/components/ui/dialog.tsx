@@ -33,10 +33,13 @@ export function Dialog({ open, onClose, title, description, children, className 
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" role="presentation">
-      <button className="absolute inset-0 cursor-default bg-black/70 backdrop-blur-[2px] animate-fade-in" onClick={onClose} aria-label="Close dialog" />
-      <div ref={ref} role="dialog" aria-modal="true" aria-labelledby="dialog-title" className={cn('relative w-full max-w-md animate-fade-up rounded-xl border border-white/10 bg-[#10151f] p-5 shadow-2xl', className)}>
+      <button className="absolute inset-0 cursor-default bg-slate-900/40 animate-fade-in" onClick={onClose} aria-label="Close dialog" />
+      <div ref={ref} role="dialog" aria-modal="true" aria-labelledby="dialog-title" className={cn('relative w-full max-w-md animate-fade-up rounded-xl border bg-card p-5 shadow-raised', className)}>
         <div className="flex items-start justify-between gap-4">
-          <div><h2 id="dialog-title" className="font-display text-base font-semibold text-slate-100">{title}</h2>{description && <p className="mt-1.5 text-xs leading-5 text-slate-500">{description}</p>}</div>
+          <div>
+            <h2 id="dialog-title" className="text-[17px] font-semibold text-foreground">{title}</h2>
+            {description && <p className="mt-1.5 text-[14px] leading-6 text-muted-foreground">{description}</p>}
+          </div>
           <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close"><X className="h-4 w-4" /></Button>
         </div>
         <div className="mt-5">{children}</div>

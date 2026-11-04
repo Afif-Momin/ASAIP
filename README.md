@@ -2,7 +2,7 @@
 
 ASAIP is a proof-of-concept decision-support platform that turns software requirements into explainable architecture alternatives, technology recommendations, weighted trade-off analysis, cloud cost estimates, scalability scenarios, architecture reviews, evolution roadmaps, and exportable reports.
 
-The application works end-to-end without an API key through a clearly labeled deterministic demo engine. When an Anthropic API key is configured, the backend can use Claude for requirements analysis and architecture generation. API keys are never sent to the browser.
+The application works end-to-end without an API key through a clearly labeled deterministic demo engine. The backend can also use a hosted model through OpenRouter (OpenAI-compatible chat completions) or directly through Anthropic for requirements analysis and architecture generation. `GET /api/config` reports honestly which engine answered, and a selected provider with no key is surfaced as a configuration error rather than silently relabeled as AI output. API keys are never sent to the browser.
 
 ## Problem statement
 
@@ -19,6 +19,7 @@ Early architecture decisions affect delivery speed, operating cost, reliability,
 - Current-load, 5×-growth, and 10×-growth scalability analysis.
 - Requirements-aware architecture evolution roadmap.
 - SQLite-backed project persistence, renaming, deletion, reopening, and saved analyses.
+- A calm, light interface built around plain-language labels and sentence-case copy, so each page states what it is doing and what the result came from.
 - Real PDF and JSON report exports.
 - A seeded **Smart E-Commerce Platform** project for immediate demonstrations.
 
@@ -40,9 +41,10 @@ React + TypeScript frontend (Vite, Tailwind CSS)
  abstraction   and validators       │
       │             │               ▼
       ▼             ▼             SQLite
- Anthropic     Scoring, cost,
- Claude API    scalability, critic,
- (optional)    evolution, reports
+ OpenRouter    Scoring, cost,
+ and/or        scalability, critic,
+ Anthropic     evolution, reports
+ (optional)
 ```
 
 The frontend uses React Flow for interactive diagrams and Recharts for data visualizations. The backend uses Pydantic models at API and AI-output boundaries. The database layer uses SQLAlchemy so the PoC can move from SQLite to PostgreSQL with an appropriate driver and deployment configuration.
@@ -80,7 +82,7 @@ asaip/
 - Python 3.11 or newer (validated with Python 3.13)
 - Node.js 20 or newer and npm
 - Optional: Docker and Docker Compose
-- Optional: an Anthropic API key for live AI-assisted analysis
+- Optional: an OpenRouter or Anthropic API key for live AI-assisted analysis (not needed for the demo engine)
 
 ## Local installation
 
@@ -143,10 +145,18 @@ Backend variables are documented in `backend/.env.example`.
 
 | Variable | Required | Purpose |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | No | Enables Claude-backed requirements analysis and architecture generation. Leave empty for the deterministic demo engine. |
+| `AI_PROVIDER` | No | `auto` (default), `demo`, `openrouter`, or `anthropic`. `auto` prefers OpenRouter, then Anthropic, then the labelled demo engine. Naming a provider explicitly without its key returns a 503 configuration error instead of falling back quietly. |
+| `OPENROUTER_API_KEY` | No | Enables live AI through OpenRouter's OpenAI-compatible chat completions endpoint. |
+| `OPENROUTER_MODEL` | No | Model identifier, defaults to `openai/gpt-4o-mini`. |
+| `OPENROUTER_BASE_URL` | No | Overrides the OpenRouter endpoint, mainly for proxies and offline testing. |
+| `OPENROUTER_APP_TITLE` / `OPENROUTER_APP_URL` | No | Optional attribution headers sent to OpenRouter. |
+| `ANTHROPIC_API_KEY` | No | Enables live AI through Claude, used when selected directly or when no OpenRouter key exists. |
 | `ANTHROPIC_MODEL` | No | Overrides the configured Claude model. |
-| `DATABASE_URL` | No | SQLAlchemy database URL; defaults to a local SQLite database. |
-| `FRONTEND_URL` | No | Allowed frontend origin for CORS. |
+| `AI_MAX_TOKENS` | No | Shared output ceiling for either live provider (1,024–32,000; default 12,000). |
+| `ASAIP_DATABASE_URL` | No | SQLAlchemy database URL; defaults to a local SQLite database. |
+| `ASAIP_CORS_ORIGINS` | No | Comma-separated allowed frontend origins; `localhost:5173` is allowed by default. |
+
+`GET /api/config` reports the live provider, model, and any configuration error, so the UI can label every result honestly.
 
 Frontend:
 
@@ -164,20 +174,20 @@ Start Docker Desktop (or your Docker daemon), then run from the project root:
 docker compose up --build
 ```
 
-The frontend is available on port 5173 and the backend on port 8000. SQLite data is stored in the `asaip-data` volume. Set `ANTHROPIC_API_KEY` in the shell or a root `.env` file only if live AI mode is wanted.
+The frontend is available on port 5173 and the backend on port 8000. SQLite data is stored in the `asaip-data` volume. Set `OPENROUTER_API_KEY` or `ANTHROPIC_API_KEY`, and optionally `AI_PROVIDER`, in the shell or a root `.env` file only if live AI mode is wanted; `docker-compose.yml` forwards those values to the backend container.
 
 ## Demo workflow
 
 1. Start both servers and open the frontend.
-2. Select **Load Demo Project** or open **Smart E-Commerce Platform** from My Projects.
-3. Inspect the structured requirements and confirm the **Demo engine** label.
-4. Open Architecture Explorer and switch among the three generated alternatives.
+2. Select **Open the sample project** on Overview, or open **Smart E-Commerce Platform** from **My projects**. To build one from scratch, use **New project** and **Fill with a sample**.
+3. Inspect the structured requirements and confirm the **Demo engine result (no AI used)** badge.
+4. Open **System designs** and switch among the three generated alternatives.
 5. Select diagram components, inspect their responsibilities, pan/zoom, fit the diagram, and export it.
-6. Open Comparison & Decision Matrix. Adjust weights, verify the total remains 100%, and run the comparison.
-7. Run a fresh Architecture Critic review and inspect severity, affected components, and recommended fixes.
-8. Estimate costs for AWS, Azure, or Google Cloud. Explain that prices use configurable assumptions rather than live pricing.
-9. Inspect the current, 5×, and 10× scalability scenarios and the evolution roadmap.
-10. Open Reports and download the PDF and JSON outputs.
+6. Open **Compare options**. Adjust the weights, verify the total stays at 100%, and run the comparison.
+7. Run a fresh **Design review** and inspect severity, affected components, and recommended fixes.
+8. Use **Cost estimate** for AWS, Azure, or Google Cloud. Explain that prices use configurable assumptions rather than live pricing.
+9. Inspect the current, 5×, and 10× scenarios in **Growth analysis**, then the staged path in **Evolution roadmap**.
+10. Open **Reports and exports** and download the PDF and JSON outputs.
 11. Create a new project to demonstrate persistence, requirement analysis, architecture generation, renaming, reopening, and deletion.
 
 ## API overview
@@ -213,7 +223,7 @@ cd backend
 python -m pytest -q
 ```
 
-Verified on 2 November 2026: **12 tests passed**. One upstream Starlette deprecation warning is emitted by the installed FastAPI test client dependency; it does not affect the test result.
+Verified on 4 November 2026: **24 tests passed**. One upstream Starlette deprecation warning is emitted by the installed FastAPI test client dependency; it does not affect the test result.
 
 Frontend production validation:
 
@@ -222,12 +232,12 @@ cd frontend
 npm run build
 ```
 
-Verified on 2 November 2026: TypeScript checking and the Vite production build completed successfully. Browser smoke tests also covered project creation/analysis/generation/deletion, diagrams, comparison validation, critic, cost, scalability, evolution, and PDF/JSON export with no console errors.
+Verified on 4 November 2026: TypeScript checking and the Vite production build completed successfully after the interface was redesigned around a light, plain-language theme. Browser walkthroughs covered the new-project wizard, requirements analysis, option generation, the System designs diagrams and SVG/PNG export, rename and delete, Design review, Cost estimate, Growth analysis, Evolution roadmap, and PDF/JSON export, with no console errors. The comparison weights were verified end to end: non-default weights produced exactly the hand-computed scores and ranks, and resetting returned the defaults. A deliberately misconfigured provider (`AI_PROVIDER=openrouter` with no API key) was confirmed to report `ai_configured: false` plus a `provider_error` from `GET /api/config` and to answer analysis requests with HTTP 503 rather than silently falling back to the built-in demo engine.
 
 ## Limitations
 
 - This is a PoC, not a production cloud provisioning or architecture governance system.
-- Demo mode uses deterministic heuristics and predefined domain knowledge; it does not claim to invoke an AI model.
+- Demo mode uses deterministic heuristics and predefined domain knowledge; it does not claim to invoke an AI model. Conversely, a live OpenRouter or Anthropic failure is reported rather than quietly re-labelled as an AI result.
 - Cloud prices are illustrative estimates from configurable assumptions. They are not live quotes and vary by region, usage, taxes, discounts, and provider pricing.
 - Architecture scores support comparison but do not replace load testing, threat modeling, compliance review, or expert engineering judgment.
 - PDF diagrams are simplified report renderings; the interactive explorer provides the full diagram experience.
@@ -236,7 +246,7 @@ Verified on 2 November 2026: TypeScript checking and the Vite production build c
 ## Future enhancements
 
 - PostgreSQL deployment and authenticated multi-user workspaces.
-- Additional LLM providers behind the existing provider abstraction.
+- Further LLM providers behind the existing provider abstraction, now that OpenRouter and Anthropic share one validated-JSON pipeline.
 - Live cloud pricing integrations with provenance and refresh timestamps.
 - Architecture Decision Records, custom templates, and collaborative comments.
 - Terraform/CDK generation with human review and policy validation.

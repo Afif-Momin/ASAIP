@@ -28,6 +28,24 @@ def cors_origins() -> list[str]:
     return [origin.strip() for origin in configured.split(",") if origin.strip()]
 
 
+PROVIDER_ALIASES = {
+    "auto": "auto",
+    "": "auto",
+    "demo": "demo",
+    "off": "demo",
+    "none": "demo",
+    "anthropic": "anthropic",
+    "claude": "anthropic",
+    "openrouter": "openrouter",
+}
+
+
+def ai_provider_selection() -> str:
+    """Return the configured provider: auto, demo, anthropic, or openrouter."""
+    raw = os.getenv("AI_PROVIDER", "auto").strip().lower()
+    return PROVIDER_ALIASES.get(raw, "auto")
+
+
 def anthropic_key() -> str | None:
     return os.getenv("ANTHROPIC_API_KEY") or None
 
@@ -36,8 +54,20 @@ def anthropic_model() -> str:
     return os.getenv("ANTHROPIC_MODEL", "claude-3-5-haiku-latest")
 
 
-def anthropic_max_tokens() -> int:
+def openrouter_key() -> str | None:
+    return os.getenv("OPENROUTER_API_KEY") or None
+
+
+def openrouter_model() -> str:
+    return os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini")
+
+
+def openrouter_base_url() -> str:
+    return os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1").rstrip("/")
+
+
+def max_output_tokens() -> int:
     try:
-        return max(1024, min(int(os.getenv("ANTHROPIC_MAX_TOKENS", "12000")), 32000))
+        return max(1024, min(int(os.getenv("AI_MAX_TOKENS", "12000")), 32000))
     except ValueError:
         return 12000

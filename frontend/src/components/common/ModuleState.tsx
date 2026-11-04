@@ -10,9 +10,22 @@ export function ModuleState({ children, requireArchitecture = true }: { children
   const navigate = useNavigate();
   if (loading && !projects.length) return <PageSkeleton />;
   if (error && !projects.length) return <ErrorState message={error} onRetry={() => refreshProjects().catch(() => undefined)} />;
-  if (!projects.length) return <EmptyState icon={<FolderPlus className="h-5 w-5" />} title="Start with your system requirements" description="Create a project to analyze requirements and generate architecture alternatives. Your work is saved by the backend." action={<Button onClick={() => navigate('/projects/new')}>Create architecture project</Button>} />;
-  if (!selectedProject) return <EmptyState title="Select a project" description="Choose a project from the selector to continue." />;
-  if (requireArchitecture && !selectedProject.architectures.length) return <EmptyState icon={<Layers3 className="h-5 w-5" />} title="No architecture alternatives yet" description={`Generate architecture alternatives for ${selectedProject.name} from its requirements analysis to use this module.`} action={<Button onClick={() => navigate('/projects/new')}>Open requirements workflow</Button>} />;
-  if (requireArchitecture && !selectedArchitecture) return <EmptyState title="Select an architecture" description="Choose one of the generated alternatives to run this analysis." />;
+  if (!projects.length) return <EmptyState
+    icon={<FolderPlus className="h-5 w-5" />}
+    title="You have not created a project yet"
+    description="Start by describing the system you have in mind. ASAIP saves your requirements on the backend, then turns them into architecture options you can compare."
+    action={<Button onClick={() => navigate('/projects/new')}>Describe a system</Button>} />;
+  if (!selectedProject) return <EmptyState
+    title="Pick a project to continue"
+    description={`You have ${projects.length} saved project${projects.length === 1 ? '' : 's'}. Choose one in the Project selector below, or open My Projects to see them all.`}
+    action={<Button variant="secondary" onClick={() => navigate('/projects')}>Open My Projects</Button>} />;
+  if (requireArchitecture && !selectedProject.architectures.length) return <EmptyState
+    icon={<Layers3 className="h-5 w-5" />}
+    title={`${selectedProject.name} has no architecture options yet`}
+    description="This module works on generated alternatives. Run architecture generation for this project first, then come back here."
+    action={<Button onClick={() => navigate('/projects/new')}>Go to the requirements workflow</Button>} />;
+  if (requireArchitecture && !selectedArchitecture) return <EmptyState
+    title="Choose which alternative to analyse"
+    description={`${selectedProject.name} has ${selectedProject.architectures.length} architecture options. Pick one above and this module will run against it.`} />;
   return <>{children}</>;
 }

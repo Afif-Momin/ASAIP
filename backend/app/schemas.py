@@ -201,6 +201,8 @@ class ArchitectureGenerationPayload(BaseModel):
 
 
 class ComparisonWeights(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     scalability: float = Field(default=20, ge=0, le=100)
     security: float = Field(default=20, ge=0, le=100)
     maintainability: float = Field(default=15, ge=0, le=100)
@@ -327,8 +329,10 @@ class HealthResponse(BaseModel):
 
 class ConfigResponse(BaseModel):
     analysis_mode: Literal["demo", "ai"]
+    ai_provider: Literal["demo", "openrouter", "anthropic"]
     ai_configured: bool
     ai_model: str | None
+    provider_error: str | None = None
     currency: Literal["INR"] = "INR"
     supported_providers: list[str]
 

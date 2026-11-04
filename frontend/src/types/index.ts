@@ -87,11 +87,11 @@ export interface Project {
   target_users: string;
   concurrent_users: number;
   daily_requests: number;
-  functional_requirements: string;
-  non_functional_requirements: string;
+  functional_requirements: string[];
+  non_functional_requirements: string[];
   budget: number;
   team_size: number;
-  preferred_languages: string;
+  preferred_languages: string[];
   cloud_provider: string;
   data_sensitivity: string;
   availability: string;
@@ -204,4 +204,14 @@ export interface EvolutionAnalysis {
   architecture_id: number;
   stages: EvolutionStage[];
   summary: string;
+}
+
+export interface PlatformConfig {
+  analysis_mode: 'demo' | 'ai';
+  ai_provider: 'demo' | 'openrouter' | 'anthropic';
+  ai_configured: boolean;
+  ai_model: string | null;
+  provider_error: string | null;
+  currency: 'INR';
+  supported_providers: string[];
 }
