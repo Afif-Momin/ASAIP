@@ -7,9 +7,10 @@ services:
       ASAIP_DATABASE_URL: sqlite:////data/asaip.db
       ASAIP_CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
       AI_PROVIDER: ${AI_PROVIDER:-auto}
-      AI_MAX_TOKENS: ${AI_MAX_TOKENS:-12000}
+      AI_MAX_TOKENS: ${AI_MAX_TOKENS:-16000}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-4o-mini}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-recursive/flint-v1.0:free}
+      OPENROUTER_FALLBACK_MODELS: ${OPENROUTER_FALLBACK_MODELS:-cohere/north-mini-code:free,openrouter/free}
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
       OPENROUTER_APP_TITLE: ${OPENROUTER_APP_TITLE:-ASAIP}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}

@@ -224,7 +224,7 @@ cd backend
 python -m pytest -q
 ```
 
-Verified on 10 November 2026: **27 tests passed** in about one second with no network access. The suite forces `AI_PROVIDER=demo` and strips any real `OPENROUTER_API_KEY`/`ANTHROPIC_API_KEY` from the environment after config load, so a developer's live key never makes the tests call a paid or rate-limited endpoint. Provider tests cover the per-pattern parallel generation contract, the free-model fallback chain (rate-limit and empty-content fallthrough), adaptive JSON-mode handling, bounded JSON repair, and terminal auth/credit errors. One upstream Starlette deprecation warning is emitted by the installed FastAPI test client dependency; it does not affect the test result.
+Verified on 10 November 2026: **29 tests passed** in about two seconds with no network access. The suite forces `AI_PROVIDER=demo` and strips any real `OPENROUTER_API_KEY`/`ANTHROPIC_API_KEY` from the environment after config load, so a developer's live key never makes the tests call a paid or rate-limited endpoint. Provider tests cover the per-pattern parallel generation contract, the free-model fallback chain (rate-limit and empty-content fallthrough), adaptive JSON-mode handling, bounded JSON repair, terminal auth/credit errors, and tolerance of hallucinated extra fields in model output. One upstream Starlette deprecation warning is emitted by the installed FastAPI test client dependency; it does not affect the test result.
 
 Frontend production validation:
 

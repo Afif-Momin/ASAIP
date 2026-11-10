@@ -142,6 +142,43 @@ def test_openrouter_requirements_analysis_marks_ai_mode(project_payload, monkeyp
     assert result.summary == analysis.summary
 
 
+def test_openrouter_tolerates_hallucinated_extra_fields(project_payload, monkeypatch):
+    project = _project(project_payload)
+    analysis = analyze_requirements(project).model_dump(mode="json")
+    analysis["summary_placeholder"] = None  # stray key the free model actually emitted
+    analysis["extra_metadata"] = {"confidence": 0.9}
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(json.loads(request.content)["messages"][-1]["content"])
+        return httpx.Response(200, json=_openrouter_json(analysis))
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
+    result = OpenRouterProvider(transport=httpx.MockTransport(handler)).analyze_requirements(project)
+    assert result.analysis_mode == "ai"
+    assert result.summary == analysis["summary"]
+    assert len(calls) == 1  # accepted on the first attempt; no retry or repair needed
+    assert not hasattr(result, "summary_placeholder")  # unknown key dropped, never persisted
+
+
+def test_openrouter_tolerates_extra_fields_in_architecture_draft(project_payload, monkeypatch):
+    project = _project(project_payload)
+    analysis = analyze_requirements(project)
+    draft = generate_fallback_architectures(project)[0].model_dump(mode="json")
+    draft["confidence_score"] = 0.95  # stray top-level key
+    draft["diagram"]["nodes"][0]["color"] = "#ff0000"  # stray nested node key
+    draft["diagram"]["legend"] = "extra"  # stray diagram key
+    handler = lambda request: httpx.Response(200, json=_openrouter_json(draft))
+    monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
+    monkeypatch.delenv("OPENROUTER_MODEL", raising=False)
+    drafts = OpenRouterProvider(transport=httpx.MockTransport(handler)).generate_architectures(project, analysis)
+    assert len(drafts) == 3
+    for item in drafts:
+        assert not hasattr(item, "confidence_score")
+        assert {node.type for node in item.diagram.nodes} <= set(CANONICAL_TYPES)
+        assert {node.tier for node in item.diagram.nodes} <= set(TIER_ORDER)
+
+
 def test_openrouter_repairs_invalid_json_once(project_payload, monkeypatch):
     project = _project(project_payload)
     analysis = analyze_requirements(project)

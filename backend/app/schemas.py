@@ -13,8 +13,12 @@ def split_text(value: object) -> object:
     return value
 
 
+# AI-output schemas below use extra="ignore": models often hallucinate stray keys
+# (e.g. "summary_placeholder"), and an otherwise-valid response must not be rejected
+# over an unknown field. Known fields stay strictly validated; unknown keys are dropped
+# and never persisted or executed. Client-input schemas (e.g. ComparisonWeights) keep extra="forbid".
 class RequirementsAnalysis(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     functional_requirements: list[str] = Field(default_factory=list)
     non_functional_requirements: list[str] = Field(default_factory=list)
@@ -87,13 +91,13 @@ class ProjectUpdate(BaseModel):
 
 
 class Position(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
     x: float
     y: float
 
 
 class DiagramNode(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
     id: str = Field(min_length=1, max_length=100)
     label: str = Field(min_length=1, max_length=160)
     type: str = Field(min_length=1, max_length=60)
@@ -103,7 +107,7 @@ class DiagramNode(BaseModel):
 
 
 class DiagramEdge(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
     id: str = Field(min_length=1, max_length=100)
     source: str = Field(min_length=1, max_length=100)
     target: str = Field(min_length=1, max_length=100)
@@ -112,7 +116,7 @@ class DiagramEdge(BaseModel):
 
 
 class Diagram(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
     nodes: list[DiagramNode] = Field(min_length=2, max_length=100)
     edges: list[DiagramEdge] = Field(default_factory=list, max_length=200)
 
@@ -128,7 +132,7 @@ class Diagram(BaseModel):
 
 
 class TechnologyStack(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
     frontend: list[str] = Field(min_length=1)
     backend: list[str] = Field(min_length=1)
     database: list[str] = Field(min_length=1)
@@ -140,7 +144,7 @@ class TechnologyStack(BaseModel):
 class ArchitectureDraft(BaseModel):
     """Validated provider/fallback payload before persistence and deterministic scoring."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     name: str = Field(min_length=1, max_length=180)
     description: str = Field(min_length=10)
