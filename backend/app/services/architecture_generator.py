@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from ..models import Project
 from ..schemas import ArchitectureDraft, Diagram, DiagramEdge, DiagramNode, TechnologyStack
+from .diagram_layout import finalize_diagram
 
 
 def _stack(project: Project, pattern: str) -> TechnologyStack:
@@ -57,122 +58,178 @@ def _domain_nodes(project: Project) -> tuple[str, str, str]:
     return f"{project.domain} Core", "Primary Workflows", "Administration & Reporting"
 
 
-def _node(node_id: str, label: str, kind: str, description: str, x: float, y: float) -> DiagramNode:
-    return DiagramNode(id=node_id, label=label, type=kind, description=description, position={"x": x, "y": y})
+def _node(node_id: str, label: str, kind: str, description: str, tier: str) -> DiagramNode:
+    return DiagramNode(id=node_id, label=label, type=kind, description=description, position={"x": 0, "y": 0}, tier=tier)
 
 
-def _edge(edge_id: str, source: str, target: str, label: str | None = None) -> DiagramEdge:
-    return DiagramEdge(id=edge_id, source=source, target=target, label=label)
+def _edge(edge_id: str, source: str, target: str, label: str | None = None, kind: str | None = None) -> DiagramEdge:
+    return DiagramEdge(id=edge_id, source=source, target=target, label=label, kind=kind)
 
 
 def _diagram(project: Project, pattern: str) -> Diagram:
     first, second, third = _domain_nodes(project)
+    users = project.target_users
     nodes = [
-        _node("client", "Web & Mobile Clients", "client", f"Interfaces used by {project.target_users}.", 40, 180),
-        _node("frontend", "React Frontend", "frontend", "Accessible browser application with server-state caching and protected routes.", 250, 180),
-        _node("observability", "Logs, Metrics & Traces", "monitoring", "Central telemetry, alerts, audit trails, and service-level monitoring.", 760, 360),
-        _node("database", "PostgreSQL", "database", "Encrypted relational system of record with backups and point-in-time recovery.", 1030, 180),
+        _node("client", "Web & Mobile Clients", "client", f"Interfaces used by {users}.", "client"),
+        _node("frontend", "React SPA", "frontend", "Accessible browser app with protected routes and server-state caching.", "client"),
+        _node("monitoring", "Logs, Metrics & Traces", "monitoring", "Central telemetry, dashboards, alerts, and audit trails.", "operations"),
+        _node("secrets", "Identity & Secrets", "secrets", "OIDC/OAuth identity, IAM roles, KMS keys, and managed secrets.", "operations"),
+        _node("database", "PostgreSQL", "database", "Encrypted relational system of record with backups and PITR.", "data"),
     ]
     edges = [
-        _edge("e-client-web", "client", "frontend", "HTTPS"),
-        _edge("e-observability", "observability", "database", "health telemetry"),
+        _edge("e-client-fe", "client", "frontend", "HTTPS", "sync"),
+        _edge("e-secrets-app", "secrets", "frontend", "auth tokens", "sync"),
     ]
     if "modular" in pattern:
         nodes += [
-            _node("ingress", "Load Balancer & WAF", "gateway", "TLS termination, request limits, and health-based routing.", 450, 180),
-            _node("modules", "Modular Application", "backend", f"One deployable with enforced {first}, {second}, and {third} module boundaries.", 670, 180),
-            _node("cache", "Redis Cache & Jobs", "cache", "Short-lived catalog/session cache and reliable background-job coordination.", 1030, 60),
+            _node("cdn", "CDN", "cdn", "Edge caching for static assets and media.", "edge"),
+            _node("lb", "Load Balancer", "loadbalancer", "TLS termination, health checks, and even request distribution.", "edge"),
+            _node("gateway", "API Gateway / WAF", "gateway", "Request validation, rate limits, and routing.", "edge"),
+            _node("app", "Modular Application", "service", f"One deployable with enforced {first}, {second}, and {third} module boundaries.", "application"),
+            _node("worker", "Background Jobs", "worker", "Reliable asynchronous work using the same released codebase.", "application"),
+            _node("queue", "Job Queue", "queue", "Durable buffer for background jobs with retries.", "integration"),
+            _node("cache", "Redis Cache", "cache", "Short-lived session and hot-read cache.", "data"),
+            _node("storage", "Object Storage", "storage", "Exports, media, and report artefacts.", "data"),
         ]
         edges += [
-            _edge("e-web-ingress", "frontend", "ingress", "API requests"),
-            _edge("e-ingress-modules", "ingress", "modules"),
-            _edge("e-modules-db", "modules", "database", "SQL transactions"),
-            _edge("e-modules-cache", "modules", "cache", "cache/jobs"),
-            _edge("e-modules-obs", "modules", "observability", "telemetry"),
+            _edge("e-fe-cdn", "frontend", "cdn", "static assets", "sync"),
+            _edge("e-fe-lb", "frontend", "lb", "API calls", "sync"),
+            _edge("e-lb-gw", "lb", "gateway", "route", "sync"),
+            _edge("e-gw-app", "gateway", "app", "REST", "sync"),
+            _edge("e-app-db", "app", "database", "SQL transactions", "data"),
+            _edge("e-app-cache", "app", "cache", "cache reads", "data"),
+            _edge("e-app-queue", "app", "queue", "enqueue jobs", "async"),
+            _edge("e-queue-worker", "queue", "worker", "consume", "async"),
+            _edge("e-worker-db", "worker", "database", "SQL", "data"),
+            _edge("e-app-storage", "app", "storage", "files", "data"),
+            _edge("e-cdn-storage", "cdn", "storage", "origin fetch", "data"),
+            _edge("e-app-mon", "app", "monitoring", "telemetry", "async"),
         ]
     elif "microservice" in pattern:
         nodes += [
-            _node("gateway", "API Gateway & WAF", "gateway", "Authentication enforcement, quotas, routing, and correlation IDs.", 440, 180),
-            _node("service-a", first, "service", "Independently deployable domain service owning its public contract.", 650, 40),
-            _node("service-b", second, "service", "Transactional workflow service with isolated scaling and failure policies.", 650, 180),
-            _node("service-c", third, "service", "Integration-focused service with idempotency and third-party isolation.", 650, 320),
-            _node("queue", "Event Bus", "queue", "Durable domain events for asynchronous integration and outbox delivery.", 850, 300),
-            _node("cache", "Distributed Cache", "cache", "Reusable read-through cache with explicit invalidation ownership.", 1030, 40),
+            _node("cdn", "CDN", "cdn", "Edge caching for static assets.", "edge"),
+            _node("gateway", "API Gateway / WAF", "gateway", "Auth enforcement, quotas, routing, and correlation IDs.", "edge"),
+            _node("svc-a", first, "service", "Independently deployable domain service owning its contract and data.", "application"),
+            _node("svc-b", second, "service", "Transactional workflow service with isolated scaling.", "application"),
+            _node("svc-c", third, "service", "Integration service with idempotency and third-party isolation.", "application"),
+            _node("queue", "Event Bus", "queue", "Durable domain events with outbox delivery.", "integration"),
+            _node("external", "Payment / Email Provider", "external", "Third-party APIs isolated behind an adapter.", "integration"),
+            _node("db-a", f"{first} DB", "database", "Service-owned schema.", "data"),
+            _node("db-b", f"{second} DB", "database", "Service-owned schema.", "data"),
+            _node("cache", "Distributed Cache", "cache", "Read-through cache with explicit invalidation.", "data"),
+            _node("search", "Search Index", "search", "Query-optimized full-text search.", "data"),
         ]
         edges += [
-            _edge("e-web-gateway", "frontend", "gateway", "REST"),
-            _edge("e-gateway-a", "gateway", "service-a"),
-            _edge("e-gateway-b", "gateway", "service-b"),
-            _edge("e-gateway-c", "gateway", "service-c"),
-            _edge("e-a-db", "service-a", "database", "owned schema"),
-            _edge("e-b-queue", "service-b", "queue", "domain events"),
-            _edge("e-queue-c", "queue", "service-c", "async commands"),
-            _edge("e-a-cache", "service-a", "cache"),
-            _edge("e-services-obs", "service-b", "observability", "traces"),
+            _edge("e-fe-cdn", "frontend", "cdn", "static", "sync"),
+            _edge("e-fe-gw", "frontend", "gateway", "REST", "sync"),
+            _edge("e-gw-a", "gateway", "svc-a", "route", "sync"),
+            _edge("e-gw-b", "gateway", "svc-b", "route", "sync"),
+            _edge("e-gw-c", "gateway", "svc-c", "route", "sync"),
+            _edge("e-a-dba", "svc-a", "db-a", "owned schema", "data"),
+            _edge("e-b-dbb", "svc-b", "db-b", "owned schema", "data"),
+            _edge("e-b-queue", "svc-b", "queue", "publish events", "async"),
+            _edge("e-queue-c", "queue", "svc-c", "consume", "async"),
+            _edge("e-c-ext", "svc-c", "external", "integrate", "sync"),
+            _edge("e-a-cache", "svc-a", "cache", "cache", "data"),
+            _edge("e-c-search", "svc-c", "search", "index/query", "data"),
+            _edge("e-b-mon", "svc-b", "monitoring", "traces", "async"),
+            _edge("e-secrets-gw", "secrets", "gateway", "verify JWT", "sync"),
         ]
     elif "serverless" in pattern:
         nodes += [
-            _node("gateway", "Managed API Gateway", "gateway", "Managed request validation, throttling, JWT verification, and function routes.", 440, 180),
-            _node("function-a", f"{first} Functions", "function", "On-demand handlers for read and query workloads.", 650, 60),
-            _node("function-b", f"{second} Functions", "function", "Short-lived transactional handlers with concurrency controls.", 650, 190),
-            _node("queue", "Managed Queue & Scheduler", "queue", "Buffered asynchronous jobs, retries, and scheduled processing.", 850, 300),
-            _node("storage", "Object Storage & CDN", "storage", "Static content, media, report artefacts, and edge delivery.", 1030, 330),
+            _node("cdn", "CDN", "cdn", "Edge delivery for the SPA and media.", "edge"),
+            _node("gateway", "Managed API Gateway", "gateway", "Managed validation, throttling, JWT verification, and function routes.", "edge"),
+            _node("fn-a", f"{first} Functions", "function", "On-demand handlers for read/query workloads.", "application"),
+            _node("fn-b", f"{second} Functions", "function", "Short-lived transactional handlers with concurrency controls.", "application"),
+            _node("worker", "Scheduled Jobs", "worker", "Timer-triggered processing and retries.", "application"),
+            _node("queue", "Managed Queue", "queue", "Buffered async jobs and event triggers.", "integration"),
+            _node("external", "Third-party APIs", "external", "External services called from handlers.", "integration"),
+            _node("cache", "Serverless Cache", "cache", "Managed cache for hot reads.", "data"),
+            _node("storage", "Object Storage", "storage", "Static content, media, and artefacts (CDN origin).", "data"),
         ]
         edges += [
-            _edge("e-web-gateway", "frontend", "gateway", "HTTPS/API"),
-            _edge("e-gateway-a", "gateway", "function-a"),
-            _edge("e-gateway-b", "gateway", "function-b"),
-            _edge("e-a-db", "function-a", "database", "pooled SQL"),
-            _edge("e-b-queue", "function-b", "queue", "async work"),
-            _edge("e-queue-third", "queue", "function-b", third),
-            _edge("e-b-storage", "function-b", "storage", "artefacts"),
-            _edge("e-fn-obs", "function-a", "observability", "managed telemetry"),
+            _edge("e-fe-cdn", "frontend", "cdn", "static", "sync"),
+            _edge("e-fe-gw", "frontend", "gateway", "HTTPS/API", "sync"),
+            _edge("e-gw-a", "gateway", "fn-a", "invoke", "sync"),
+            _edge("e-gw-b", "gateway", "fn-b", "invoke", "sync"),
+            _edge("e-a-db", "fn-a", "database", "pooled SQL", "data"),
+            _edge("e-a-cache", "fn-a", "cache", "cache", "data"),
+            _edge("e-b-queue", "fn-b", "queue", "async work", "async"),
+            _edge("e-queue-worker", "queue", "worker", "trigger", "async"),
+            _edge("e-worker-db", "worker", "database", "SQL", "data"),
+            _edge("e-b-storage", "fn-b", "storage", "artefacts", "data"),
+            _edge("e-cdn-storage", "cdn", "storage", "origin", "data"),
+            _edge("e-b-ext", "fn-b", "external", "call", "sync"),
+            _edge("e-a-mon", "fn-a", "monitoring", "managed telemetry", "async"),
+            _edge("e-secrets-fn", "secrets", "fn-b", "secrets", "sync"),
         ]
     elif "event" in pattern:
         nodes += [
-            _node("gateway", "API Ingress", "gateway", "Synchronous command/query endpoint with authentication and backpressure.", 440, 180),
-            _node("command", f"{second} Command API", "backend", "Validates writes and atomically records events using an outbox.", 640, 180),
-            _node("stream", "Durable Event Stream", "queue", "Ordered domain events with retention, replay controls, and consumer groups.", 830, 180),
-            _node("worker-a", first, "worker", "Builds optimized read models and search projections.", 1030, 40),
-            _node("worker-b", third, "worker", "Handles integration side effects idempotently.", 1030, 310),
-            _node("read-db", "Read Projections", "database", "Query-optimized eventually consistent views.", 1250, 40),
+            _node("gateway", "API Ingress", "gateway", "Synchronous command/query endpoint with auth and backpressure.", "edge"),
+            _node("command", f"{second} Command API", "service", "Validates writes and atomically records events via an outbox.", "application"),
+            _node("projector", first, "worker", "Builds optimized read models and search projections.", "application"),
+            _node("integrator", third, "worker", "Handles integration side effects idempotently.", "application"),
+            _node("stream", "Durable Event Stream", "queue", "Ordered domain events with retention, replay, and consumer groups.", "integration"),
+            _node("external", "Downstream Systems", "external", "External consumers and partner APIs.", "integration"),
+            _node("read-db", "Read Projections", "database", "Query-optimized eventually consistent views.", "data"),
+            _node("cache", "Read Cache", "cache", "Cache for hot projections.", "data"),
+            _node("search", "Search Index", "search", "Full-text search over projections.", "data"),
         ]
         edges += [
-            _edge("e-web-gateway", "frontend", "gateway"),
-            _edge("e-gateway-command", "gateway", "command", "commands"),
-            _edge("e-command-db", "command", "database", "transaction + outbox"),
-            _edge("e-command-stream", "command", "stream", "publish"),
-            _edge("e-stream-a", "stream", "worker-a", "consume"),
-            _edge("e-stream-b", "stream", "worker-b", "consume"),
-            _edge("e-a-read", "worker-a", "read-db", "project"),
-            _edge("e-stream-obs", "stream", "observability", "lag metrics"),
+            _edge("e-fe-gw", "frontend", "gateway", "commands/queries", "sync"),
+            _edge("e-gw-cmd", "gateway", "command", "commands", "sync"),
+            _edge("e-cmd-db", "command", "database", "transaction + outbox", "data"),
+            _edge("e-cmd-stream", "command", "stream", "publish", "async"),
+            _edge("e-stream-proj", "stream", "projector", "consume", "async"),
+            _edge("e-stream-int", "stream", "integrator", "consume", "async"),
+            _edge("e-proj-read", "projector", "read-db", "project", "data"),
+            _edge("e-proj-search", "projector", "search", "index", "data"),
+            _edge("e-int-ext", "integrator", "external", "integrate", "sync"),
+            _edge("e-int-cache", "integrator", "cache", "cache", "data"),
+            _edge("e-stream-mon", "stream", "monitoring", "consumer lag", "async"),
+            _edge("e-secrets-cmd", "secrets", "command", "credentials", "sync"),
         ]
     elif "layered" in pattern:
         nodes += [
-            _node("controller", "API Controllers", "backend", "Transport validation and OpenAPI endpoints.", 470, 180),
-            _node("service", "Application Services", "backend", f"Use-case coordination for {first} and {second}.", 680, 180),
-            _node("repository", "Domain & Repositories", "backend", f"Business rules and persistence adapters including {third}.", 880, 180),
+            _node("lb", "Reverse Proxy", "loadbalancer", "TLS termination and request forwarding.", "edge"),
+            _node("controller", "API Controllers", "service", "Transport validation and OpenAPI endpoints.", "application"),
+            _node("service", "Application Services", "service", f"Use-case coordination for {first} and {second}.", "application"),
+            _node("repository", "Domain & Repositories", "service", f"Business rules and persistence adapters including {third}.", "application"),
+            _node("worker", "Background Scheduler", "worker", "Scheduled and asynchronous work.", "application"),
+            _node("cache", "Redis Cache", "cache", "Targeted read caching.", "data"),
+            _node("storage", "Object Storage", "storage", "Files and exports.", "data"),
         ]
         edges += [
-            _edge("e-web-controller", "frontend", "controller"),
-            _edge("e-controller-service", "controller", "service"),
-            _edge("e-service-repo", "service", "repository"),
-            _edge("e-repo-db", "repository", "database"),
-            _edge("e-service-obs", "service", "observability"),
+            _edge("e-fe-lb", "frontend", "lb", "HTTPS", "sync"),
+            _edge("e-lb-ctrl", "lb", "controller", "forward", "sync"),
+            _edge("e-ctrl-svc", "controller", "service", "invoke", "sync"),
+            _edge("e-svc-repo", "service", "repository", "call", "sync"),
+            _edge("e-repo-db", "repository", "database", "SQL", "data"),
+            _edge("e-svc-cache", "service", "cache", "cache", "data"),
+            _edge("e-svc-worker", "service", "worker", "jobs", "async"),
+            _edge("e-worker-db", "worker", "database", "SQL", "data"),
+            _edge("e-repo-storage", "repository", "storage", "files", "data"),
+            _edge("e-svc-mon", "service", "monitoring", "telemetry", "async"),
         ]
     else:
         nodes += [
-            _node("app", "Single Application", "backend", f"Cohesive application covering {first}, {second}, and {third}.", 560, 180),
-            _node("worker", "Background Worker", "worker", "Scheduled and asynchronous work using the same released codebase.", 780, 50),
+            _node("lb", "Load Balancer", "loadbalancer", "TLS termination and routing to app instances.", "edge"),
+            _node("app", "Single Application", "service", f"Cohesive application covering {first}, {second}, and {third}.", "application"),
+            _node("worker", "Background Worker", "worker", "Scheduled and async work from the same codebase.", "application"),
+            _node("cache", "Redis Cache", "cache", "Session and hot-read cache.", "data"),
+            _node("storage", "Object Storage", "storage", "Files, media, and exports.", "data"),
         ]
         edges += [
-            _edge("e-web-app", "frontend", "app", "REST"),
-            _edge("e-app-db", "app", "database"),
-            _edge("e-app-worker", "app", "worker", "jobs"),
-            _edge("e-worker-db", "worker", "database"),
-            _edge("e-app-obs", "app", "observability"),
+            _edge("e-fe-lb", "frontend", "lb", "HTTPS", "sync"),
+            _edge("e-lb-app", "lb", "app", "route", "sync"),
+            _edge("e-app-db", "app", "database", "SQL", "data"),
+            _edge("e-app-cache", "app", "cache", "cache", "data"),
+            _edge("e-app-worker", "app", "worker", "jobs", "async"),
+            _edge("e-worker-db", "worker", "database", "SQL", "data"),
+            _edge("e-app-storage", "app", "storage", "files", "data"),
+            _edge("e-app-mon", "app", "monitoring", "telemetry", "async"),
         ]
-    return Diagram(nodes=nodes, edges=edges)
+    return finalize_diagram(Diagram(nodes=nodes, edges=edges))
 
 
 def _draft(project: Project, pattern: str) -> ArchitectureDraft:
@@ -290,8 +347,8 @@ def _draft(project: Project, pattern: str) -> ArchitectureDraft:
     )
 
 
-def generate_fallback_architectures(project: Project) -> list[ArchitectureDraft]:
-    """Select three appropriate, genuinely different alternatives using project constraints."""
+def select_patterns(project: Project) -> list[str]:
+    """Choose three genuinely different architecture styles from project constraints."""
     high_load = project.concurrent_users >= 5000 or project.daily_requests >= 2_000_000
     small_team = project.team_size <= 4
     rapid_growth = any(word in project.growth.lower() for word in ("high", "rapid", "aggressive", "10x"))
@@ -309,5 +366,9 @@ def generate_fallback_architectures(project: Project) -> list[ArchitectureDraft]
     if "on-prem" in project.deployment_preference.lower():
         priorities["serverless"] -= 30
         priorities["modular monolith"] += 5
-    selected = sorted(priorities, key=priorities.get, reverse=True)[:3]
-    return [_draft(project, pattern) for pattern in selected]
+    return sorted(priorities, key=priorities.get, reverse=True)[:3]
+
+
+def generate_fallback_architectures(project: Project) -> list[ArchitectureDraft]:
+    """Deterministic, clearly labelled demo engine; no key or network required."""
+    return [_draft(project, pattern) for pattern in select_patterns(project)]

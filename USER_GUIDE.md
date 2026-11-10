@@ -55,15 +55,18 @@ A direct Anthropic Claude configuration is also supported for teams that specifi
 
 ### Model recommendation
 
-Start with a cost-conscious model that supports reliable JSON output. The default OpenRouter configuration uses:
+ASAIP defaults to **free OpenRouter models**, so live generation costs $0 with a normal OpenRouter key. The default configuration is:
 
 ```text
-openai/gpt-4o-mini
+Primary:   recursive/flint-v1.0:free
+Fallbacks: cohere/north-mini-code:free, openrouter/free
 ```
 
-For deeper architecture reasoning, you can try a higher-capability Claude Sonnet model available in your OpenRouter account. Model names, availability, structured-output support, and prices can change, so confirm the exact model identifier in OpenRouter before using it.
+The primary free model is chosen for strong reasoning and reliable JSON output, with a large token budget so diagrams come back complete. If the primary is rate-limited, temporarily unavailable, or returns empty output, ASAIP automatically tries each fallback model in order — you do not have to change anything. You can override the primary or the fallback chain in `backend/.env` (see below).
 
-Do not choose a model only because it is the largest or most expensive. For this PoC, structured-output reliability, reasoning quality, latency, and cost are more important.
+Free models are shared and rate-limited, so they can be slower than paid models. A full three-option generation typically takes about **1–2 minutes**; requirements analysis takes roughly 20–40 seconds. The generating screen shows the active model and an elapsed-time counter so you can see it is still working.
+
+For deeper reasoning you can point `OPENROUTER_MODEL` at a higher-capability model available in your account (for example a Claude Sonnet model). Model names, availability, structured-output support, and prices change, so confirm the exact identifier in OpenRouter before using it. Do not choose a model only because it is the largest or most expensive — for this PoC, structured-output reliability, reasoning quality, latency, and cost matter more.
 
 ### Configure OpenRouter in PowerShell
 
@@ -80,7 +83,9 @@ Set these values in `.env`:
 ```dotenv
 AI_PROVIDER=auto
 OPENROUTER_API_KEY=your_actual_openrouter_key
-OPENROUTER_MODEL=openai/gpt-4o-mini
+OPENROUTER_MODEL=recursive/flint-v1.0:free
+OPENROUTER_FALLBACK_MODELS=cohere/north-mini-code:free,openrouter/free
+AI_MAX_TOKENS=16000
 ```
 
 Save the file and restart the backend. Do not put this key in the frontend, in `VITE_API_URL`, in source code, or in a screenshot submitted with the project.
@@ -194,7 +199,7 @@ The result is grouped under **What ASAIP understood**, **Constraints we must res
 
 Select **Generate architectures**.
 
-While it works the page reads **Designing your architecture options**; when it finishes, **Analysis complete** appears and the next step is offered. ASAIP creates three suitable alternatives with different trade-offs. It does not automatically choose microservices. Depending on the project, alternatives can include modular monolith, serverless, event-driven, microservices, layered, or monolithic approaches.
+While it works the page reads **Designing your architecture options** and shows whether the **Live AI** or **Built-in engine** is answering, the active model name, and an elapsed-time counter. With a free live model this usually takes about **1–2 minutes**; the note explains that backup models are tried automatically and that the explorer opens as soon as the options are ready. When it finishes, **Analysis complete** appears and the next step is offered. ASAIP creates three suitable alternatives with different trade-offs. It does not automatically choose microservices. Depending on the project, alternatives can include modular monolith, serverless, event-driven, microservices, layered, or monolithic approaches. With a live provider, each pattern is designed in its own focused model call so the three options are genuinely different rather than one cut-short list.
 
 Each alternative includes:
 
@@ -242,16 +247,26 @@ Use the **Architecture option** selector or the **Option 1 / 2 / 3** cards to sw
 
 ### Read the diagram
 
-Nodes represent components such as:
+The diagram is laid out **left to right** as a layered, industry-style topology. Components are grouped into six labelled, colour-tinted tiers so you can see how a request flows from the user down to the data and back:
 
-- Clients and frontend applications.
-- Gateways and load balancers.
-- Backend applications or services.
-- Databases and caches.
-- Queues and object storage.
-- Monitoring and cloud infrastructure.
+| Tier | What lives here |
+|---|---|
+| Client | End-user devices and client apps. |
+| Edge | CDN, load balancers, and API gateways — the front door. |
+| Application | Frontend apps, backend services, serverless functions, and workers. |
+| Integration | Queues, event buses, and external/third-party systems. |
+| Data | Databases, caches, object storage, and search indexes. |
+| Operations | Monitoring/observability and secrets management. |
 
-Connections describe important communication paths. The legend explains component categories.
+Each component card carries a category **icon and colour** (for example a database cylinder, a queue, a shield for secrets, a gauge for monitoring) plus a project-specific label such as "Amazon Aurora PostgreSQL" or "Order Service". Selecting a card opens its details.
+
+Connections are **typed** so the communication style is visible at a glance, and the legend under the canvas explains both the component categories and the line styles:
+
+- **Request / response** — a solid grey line for synchronous calls.
+- **Async event / queue** — a dashed, animated orange line for messages and events.
+- **Data read / write** — a dotted green line for storage access.
+
+The same layout, colours, icons, and connection types are reproduced in the SVG, PNG, and PDF exports, so what you see in the explorer is what you deliver.
 
 ### Inspect a component
 
@@ -501,7 +516,7 @@ Settings shows whether the backend is reachable and which analysis provider is a
 ### What to check
 
 - Backend API connection, with **Check again** to re-test it and **See the API reference** to open the FastAPI docs.
-- The **Live AI is on** or **Built-in engine only** badge, the selected provider — **OpenRouter**, **Anthropic**, or **Built-in analysis engine (no AI service used)** — and, for a live provider, its model name.
+- The **Live AI is on** or **Built-in engine only** badge, the selected provider — **OpenRouter**, **Anthropic**, or **Built-in analysis engine (no AI service used)** — and, for a live provider, its model name. A model whose identifier ends in `:free` is tagged **Free model**, and the **Automatic fallback models** list shows the backup free models ASAIP will try if the primary is rate-limited or unavailable.
 - **Modes recorded on your saved analyses**: the engine that produced each analysis already stored in this workspace.
 - Where the frontend points (`VITE_API_URL`, the local backend address, the dev-server port, and the INR currency used for costs).
 
@@ -546,6 +561,15 @@ Check that:
 - The model can return the requested structured output.
 
 Live provider errors are shown rather than silently relabelled as AI output. With `AI_PROVIDER` explicitly set to `openrouter` or `anthropic` and no key, the backend answers analysis requests with **HTTP 503** and Settings shows **"The selected AI provider is not ready"** — it never falls back to the built-in engine behind your back. For an offline presentation, set `AI_PROVIDER=demo` deliberately.
+
+### Generation is slow or a free model is rate-limited
+
+Free OpenRouter models are shared and can be rate-limited (HTTP 429) or briefly unavailable. This is expected, not a bug:
+
+- ASAIP automatically tries the next model in `OPENROUTER_FALLBACK_MODELS`, so a request usually still succeeds. Watch the elapsed-time counter on the generating screen.
+- If every model in the chain is rate-limited at once, wait a minute and retry, or add another free model to the fallback chain in `backend/.env` and restart the backend.
+- If a model returns empty or truncated diagrams, raise `AI_MAX_TOKENS` (up to 32,000) so reasoning models have room to finish, then restart.
+- For a fast, guaranteed-offline demonstration, set `AI_PROVIDER=demo` deliberately; the deterministic engine produces the same layered diagram style without any network call.
 
 ### The comparison will not run
 

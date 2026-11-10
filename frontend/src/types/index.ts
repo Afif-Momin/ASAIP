@@ -42,12 +42,14 @@ export interface DiagramNode {
   type: string;
   description: string;
   position: DiagramPosition;
+  tier?: string;
 }
 export interface DiagramEdge {
   id: string;
   source: string;
   target: string;
   label?: string;
+  kind?: string;
 }
 export interface ArchitectureDiagram {
   nodes: DiagramNode[];
@@ -211,6 +213,7 @@ export interface PlatformConfig {
   ai_provider: 'demo' | 'openrouter' | 'anthropic';
   ai_configured: boolean;
   ai_model: string | null;
+  ai_fallback_models: string[];
   provider_error: string | null;
   currency: 'INR';
   supported_providers: string[];

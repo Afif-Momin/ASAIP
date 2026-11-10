@@ -67,10 +67,16 @@ export default function SettingsPage() {
           <div className={`rounded-lg border p-4 ${usingLiveAi ? 'border-indigo-500/25 bg-indigo-50' : 'border-border bg-muted/40'}`}>
             <div className="flex flex-wrap items-center gap-2">
               <Badge tone={usingLiveAi ? 'violet' : 'cyan'}>{usingLiveAi ? 'Live AI is on' : 'Built-in engine only'}</Badge>
-              {config.ai_model && <span className="text-[13px] text-muted-foreground">{config.ai_model}</span>}
+              {config.ai_model && <span className="font-mono text-[12px] text-muted-foreground">{config.ai_model}</span>}
+              {usingLiveAi && config.ai_model?.includes(':free') && <Badge tone="green">Free model</Badge>}
             </div>
             <p className="mt-2.5 text-[14px] leading-6 text-slate-700">{providerNames[config.ai_provider]}</p>
             <p className="mt-1.5 text-[13px] leading-5 text-muted-foreground">{usingLiveAi ? 'New analyses are produced by the configured AI service. Anything generated earlier keeps the mode it was created with.' : 'New analyses use ASAIP’s deterministic rules. They work offline and are always labelled as engine results — never presented as AI output.'}</p>
+            {usingLiveAi && config.ai_model?.includes(':free') && <p className="mt-2 text-[13px] leading-5 text-muted-foreground">Free models cost nothing per request but can be rate-limited. ASAIP designs each option separately and automatically tries the backup models below if the primary is busy.</p>}
+            {usingLiveAi && config.ai_fallback_models.length > 0 && <div className="mt-2.5">
+              <p className="text-[12px] font-medium text-muted-foreground">Automatic fallback models</p>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">{config.ai_fallback_models.map((model) => <Badge key={model}><span className="font-mono text-[11px]">{model}</span></Badge>)}</div>
+            </div>}
           </div>
           {config.provider_error && <div className="rounded-lg border border-red-600/25 bg-red-50 p-4">
             <p className="text-[14px] font-semibold text-danger">The selected AI provider is not ready</p>

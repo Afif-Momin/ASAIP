@@ -1,12 +1,12 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ArrowRight, Check, CheckCircle2, ClipboardList, Gauge, Layers3, Lightbulb, ListChecks,
+  ArrowRight, Check, CheckCircle2, ClipboardList, Clock, Gauge, Layers3, Lightbulb, ListChecks,
   PencilLine, ShieldAlert, Users, WandSparkles,
 } from 'lucide-react';
 import { api, getErrorMessage } from '@/services/api';
 import { useApp } from '@/context/AppContext';
-import type { ProjectPayload, RequirementsAnalysis } from '@/types';
+import type { PlatformConfig, ProjectPayload, RequirementsAnalysis } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Field, Input, Select, Textarea } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -44,9 +44,18 @@ export default function NewProjectPage() {
   const [analysis, setAnalysis] = useState<RequirementsAnalysis | null>(null);
   const [analysisTab, setAnalysisTab] = useState<AnalysisTab>('summary');
   const [busy, setBusy] = useState(false);
+  const [config, setConfig] = useState<PlatformConfig | null>(null);
+  const [elapsed, setElapsed] = useState(0);
   const { refreshProjects, selectProject, selectArchitecture } = useApp();
   const navigate = useNavigate();
   const { toast } = useToast();
+  useEffect(() => { api.system.config().then(setConfig).catch(() => setConfig(null)); }, []);
+  useEffect(() => {
+    if (view !== 'generating') { setElapsed(0); return; }
+    setElapsed(0);
+    const timer = window.setInterval(() => setElapsed((seconds) => seconds + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, [view]);
   const update = <K extends keyof ProjectPayload>(key: K, value: ProjectPayload[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
     setErrors((current) => { const next = { ...current }; delete next[key]; return next; });
@@ -105,6 +114,8 @@ export default function NewProjectPage() {
   };
   const step = view === 'form' ? 0 : view === 'analysis' ? 1 : 2;
   const engine = engineLabel(analysis?.analysis_mode);
+  const liveAi = analysis?.analysis_mode === 'ai';
+  const modelName = config?.ai_model;
 
   return <div className="mx-auto max-w-5xl space-y-6 animate-fade-up">
     <PageHeader
@@ -225,7 +236,14 @@ export default function NewProjectPage() {
     {view === 'generating' && <section className="flex min-h-[380px] flex-col items-center justify-center rounded-xl border bg-card px-6 text-center shadow-card" role="status" aria-live="polite">
       <span className="mb-5 h-9 w-9 animate-spin rounded-full border-2 border-slate-200 border-t-primary" />
       <h2 className="text-[17px] font-semibold text-foreground">Designing your architecture options</h2>
-      <p className="mt-2 max-w-md text-[14px] leading-6 text-muted-foreground">Choosing patterns, mapping components, picking stacks, and scoring each option against your requirements.</p>
+      <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+        <Badge tone={liveAi ? 'violet' : 'cyan'}>{liveAi ? 'Live AI' : 'Built-in engine'}</Badge>
+        {liveAi && modelName && <Badge>{modelName}</Badge>}
+        <span className="inline-flex items-center gap-1.5 text-[13px] text-muted-foreground"><Clock className="h-3.5 w-3.5" />{elapsed}s elapsed</span>
+      </div>
+      <p className="mt-3 max-w-lg text-[14px] leading-6 text-muted-foreground">{liveAi
+        ? 'Each option is designed separately by the AI model. Free models usually take 30–90 seconds, and ASAIP automatically tries backup models if one is busy. This page opens the explorer as soon as the options are ready.'
+        : 'The built-in engine is choosing patterns, mapping components, and scoring each option against your requirements. This completes in a moment.'}</p>
       <ul className="mt-6 grid w-full max-w-xl gap-2 text-left sm:grid-cols-3">
         {['Matching patterns to your load and team', 'Drawing the components and connections', 'Scoring cost, scale, and maintainability'].map((label) => <li key={label} className="rounded-lg border bg-slate-50 p-3 text-[13px] leading-5 text-slate-700">{label}</li>)}
       </ul>

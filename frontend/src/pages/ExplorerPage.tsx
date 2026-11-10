@@ -7,11 +7,14 @@ import {
 import html2canvas from 'html2canvas';
 import {
   CheckCircle2, Code2, Database, FileCode2, GitBranch, ImageDown, Layers3,
-  Maximize2, MousePointer2, Network, Server, ShieldCheck, TrendingUp, XCircle,
+  Maximize2, MousePointer2, Network, ShieldCheck, TrendingUp, XCircle,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { getErrorMessage, saveBlob } from '@/services/api';
-import { exportDiagramSvg, nodeColor } from '@/lib/diagram-export';
+import { exportDiagramSvg } from '@/lib/diagram-export';
+import {
+  EDGE_KINDS, componentMeta, computeTierBands, edgeVisual, nodeColor, tierMeta,
+} from '@/lib/diagram';
 import { formatINR } from '@/lib/format';
 import { ModuleState } from '@/components/common/ModuleState';
 import { PageHeader } from '@/components/common/PageHeader';
@@ -23,24 +26,43 @@ import { EmptyState } from '@/components/common/States';
 import { useToast } from '@/components/ui/toast';
 import type { Architecture, DiagramNode } from '@/types';
 
-interface FlowNodeData extends Record<string, unknown> { label: string; componentType: string; description: string }
+interface FlowNodeData extends Record<string, unknown> {
+  label: string; componentType: string; description: string; tier?: string;
+}
 type FlowNode = Node<FlowNodeData, 'architecture'>;
 
 function ArchitectureNode({ data, selected }: NodeProps<FlowNode>) {
-  const color = nodeColor(data.componentType);
-  return <div className={`relative w-[200px] rounded-xl border bg-white px-4 py-3 shadow-card transition ${selected ? 'border-primary ring-2 ring-primary/25' : 'border-slate-300'}`}>
+  const meta = componentMeta(data.componentType);
+  const Icon = meta.icon;
+  return <div
+    className={`relative flex h-[88px] w-[220px] items-center gap-3 rounded-xl border bg-white px-3.5 shadow-card transition ${selected ? 'border-primary ring-2 ring-primary/25' : 'border-slate-200'}`}
+    style={{ borderLeftColor: meta.color, borderLeftWidth: 4 }}
+  >
     <Handle type="target" position={Position.Left} className="!h-2 !w-2 !border-2 !border-white !bg-slate-400" />
-    <span className="absolute bottom-3 left-0 top-3 w-0.5 rounded-full" style={{ backgroundColor: color }} />
-    <div className="flex items-center gap-2"><span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: color }} /><p className="truncate text-[13px] font-semibold text-foreground">{data.label}</p></div>
-    <p className="mt-1 truncate pl-4 text-[12px] capitalize text-muted-foreground">{data.componentType}</p>
+    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg" style={{ backgroundColor: `${meta.color}1a`, color: meta.color }}>
+      <Icon className="h-[18px] w-[18px]" strokeWidth={2} />
+    </span>
+    <span className="min-w-0 flex-1">
+      <span className="block truncate text-[13px] font-semibold leading-tight text-foreground">{data.label}</span>
+      <span className="mt-1 block truncate text-[11px] font-medium" style={{ color: meta.color }}>{meta.label}</span>
+    </span>
     <Handle type="source" position={Position.Right} className="!h-2 !w-2 !border-2 !border-white !bg-slate-400" />
   </div>;
 }
-const nodeTypes = { architecture: ArchitectureNode };
+
+interface TierZoneData extends Record<string, unknown> { label: string; tint: string; border: string }
+function TierZoneNode({ data }: NodeProps) {
+  const zone = data as TierZoneData;
+  return <div className="relative h-full w-full rounded-2xl border" style={{ backgroundColor: zone.tint, borderColor: zone.border }}>
+    <span className="absolute left-3 top-2.5 rounded-md bg-white/85 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600 shadow-sm">{zone.label}</span>
+  </div>;
+}
+
+const nodeTypes = { architecture: ArchitectureNode, tierZone: TierZoneNode };
 
 function FitControl() {
   const { fitView } = useReactFlow();
-  return <Panel position="top-right"><Button size="sm" variant="secondary" onClick={() => fitView({ padding: 0.18, duration: 350 })}><Maximize2 className="h-4 w-4" />Fit to screen</Button></Panel>;
+  return <Panel position="top-right"><Button size="sm" variant="secondary" onClick={() => fitView({ padding: 0.16, duration: 350 })}><Maximize2 className="h-4 w-4" />Fit to screen</Button></Panel>;
 }
 
 export default function ExplorerPage() {
@@ -51,16 +73,39 @@ export default function ExplorerPage() {
   const diagramRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const architecture = selectedArchitecture;
-  const nodes = useMemo<FlowNode[]>(() => (architecture?.diagram.nodes || []).map((node, index) => ({
-    id: node.id, type: 'architecture', position: node.position || { x: (index % 3) * 250, y: Math.floor(index / 3) * 160 },
-    data: { label: node.label, componentType: node.type, description: node.description },
-  })), [architecture]);
-  const edges = useMemo<Edge[]>(() => (architecture?.diagram.edges || []).map((edge) => ({
-    id: edge.id, source: edge.source, target: edge.target, label: edge.label,
-    type: 'smoothstep', animated: false, style: { stroke: '#94a3b8', strokeWidth: 1.5 },
-    markerEnd: { type: MarkerType.ArrowClosed, color: '#64748b', width: 16, height: 16 },
-  })), [architecture]);
-  const types = useMemo(() => [...new Set((architecture?.diagram.nodes || []).map((node) => node.type))], [architecture]);
+
+  const nodes = useMemo<Node[]>(() => {
+    const diagramNodes = architecture?.diagram.nodes ?? [];
+    const zones: Node[] = computeTierBands(diagramNodes).map((band) => ({
+      id: `tier-${band.id}`, type: 'tierZone', position: { x: band.x, y: band.y },
+      data: { label: band.label, tint: band.tint, border: band.border },
+      style: { width: band.width, height: band.height },
+      selectable: false, draggable: false, connectable: false, focusable: false, zIndex: -1,
+    }));
+    const components: Node[] = diagramNodes.map((node) => ({
+      id: node.id, type: 'architecture', position: node.position,
+      data: { label: node.label, componentType: node.type, description: node.description, tier: node.tier },
+    }));
+    return [...zones, ...components];
+  }, [architecture]);
+
+  const edges = useMemo<Edge[]>(() => (architecture?.diagram.edges ?? []).map((edge) => {
+    const visual = edgeVisual(edge.kind);
+    return {
+      id: edge.id, source: edge.source, target: edge.target, label: edge.label,
+      type: 'smoothstep', animated: visual.animated,
+      style: { stroke: visual.stroke, strokeWidth: 1.6, strokeDasharray: visual.dash },
+      markerEnd: { type: MarkerType.ArrowClosed, color: visual.stroke, width: 16, height: 16 },
+      labelStyle: { fill: '#475569', fontSize: 11, fontWeight: 500 },
+      labelBgStyle: { fill: '#ffffff', fillOpacity: 0.9 },
+      labelBgPadding: [4, 2] as [number, number], labelBgBorderRadius: 4,
+    };
+  }), [architecture]);
+
+  const types = useMemo(() => [...new Set((architecture?.diagram.nodes ?? []).map((node) => node.type))], [architecture]);
+  const selectedMeta = selectedNode ? componentMeta(selectedNode.type) : null;
+  const selectedTier = selectedNode ? tierMeta(selectedNode.tier) : null;
+  const SelectedIcon = selectedMeta?.icon;
 
   const exportPng = async () => {
     if (!diagramRef.current || !architecture) return;
@@ -100,23 +145,30 @@ export default function ExplorerPage() {
     {architecture && tab === 'diagram' && (architecture.diagram.nodes.length ? <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
       <section className="overflow-hidden rounded-xl border bg-white shadow-card">
         <div ref={diagramRef} className="h-[560px] w-full sm:h-[620px]">
-          <ReactFlowProvider><ReactFlow key={architecture.id} nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView fitViewOptions={{ padding: 0.18 }} minZoom={0.25} maxZoom={1.8} onNodeClick={(_, node) => setSelectedNode(architecture.diagram.nodes.find((item) => item.id === node.id) || null)} onPaneClick={() => setSelectedNode(null)} colorMode="light" proOptions={{ hideAttribution: false }}>
+          <ReactFlowProvider><ReactFlow key={architecture.id} nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView fitViewOptions={{ padding: 0.16 }} minZoom={0.2} maxZoom={1.8} onNodeClick={(_, node) => setSelectedNode(node.type === 'architecture' ? architecture.diagram.nodes.find((item) => item.id === node.id) || null : null)} onPaneClick={() => setSelectedNode(null)} colorMode="light" proOptions={{ hideAttribution: false }}>
             <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="#d5d0c6" />
             <Controls position="bottom-left" showInteractive={false} />
-            <MiniMap position="bottom-right" pannable zoomable nodeColor={(node) => nodeColor((node.data as FlowNodeData).componentType)} maskColor="rgba(240, 238, 232, 0.7)" className="!hidden sm:!block" />
+            <MiniMap position="bottom-right" pannable zoomable nodeColor={(node) => node.type === 'tierZone' ? '#e2e8f0' : nodeColor((node.data as FlowNodeData).componentType)} maskColor="rgba(240, 238, 232, 0.7)" className="!hidden sm:!block" />
             <FitControl />
             <Panel position="top-left"><div className="pointer-events-none rounded-lg border bg-white/95 px-3 py-2 shadow-card"><p className="text-[13px] font-medium text-foreground">{architecture.name}</p><p className="mt-0.5 flex items-center gap-1.5 text-[12px] text-muted-foreground"><MousePointer2 className="h-3 w-3" />Click a component for details</p></div></Panel>
           </ReactFlow></ReactFlowProvider>
         </div>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t px-4 py-3"><span className="text-[12px] font-medium text-muted-foreground">Component types:</span>{types.map((type) => <span key={type} className="inline-flex items-center gap-1.5 text-[12px] capitalize text-slate-600"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: nodeColor(type) }} />{type}</span>)}</div>
+        <div className="space-y-2.5 border-t px-4 py-3">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2"><span className="text-[12px] font-semibold text-muted-foreground">Components:</span>{types.map((type) => { const meta = componentMeta(type); const Icon = meta.icon; return <span key={type} className="inline-flex items-center gap-1.5 text-[12px] text-slate-600"><Icon className="h-3.5 w-3.5" style={{ color: meta.color }} />{meta.label}</span>; })}</div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2"><span className="text-[12px] font-semibold text-muted-foreground">Connections:</span>{EDGE_KINDS.map((kind) => { const visual = edgeVisual(kind); return <span key={kind} className="inline-flex items-center gap-1.5 text-[12px] text-slate-600"><svg width="26" height="8" aria-hidden="true"><line x1="0" y1="4" x2="26" y2="4" stroke={visual.stroke} strokeWidth="2" strokeDasharray={visual.dash} /></svg>{visual.label}</span>; })}</div>
+          <p className="text-[12px] leading-5 text-muted-foreground">Read left to right: requests enter at the client and edge layers, flow through application logic, and reach data stores. Coloured bands group each architectural layer. Click any component to read what it does.</p>
+        </div>
       </section>
       <aside className="space-y-4">
         <section className="rounded-xl border bg-card p-5 shadow-card">
           <h2 className="section-title">Component details</h2>
-          {selectedNode ? <div className="mt-4 animate-fade-in">
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg border bg-slate-50" style={{ color: nodeColor(selectedNode.type) }}><Server className="h-4 w-4" /></span>
+          {selectedNode && selectedMeta && SelectedIcon ? <div className="mt-4 animate-fade-in">
+            <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg" style={{ backgroundColor: `${selectedMeta.color}1a`, color: selectedMeta.color }}><SelectedIcon className="h-5 w-5" /></span>
             <h3 className="mt-3 text-[15px] font-semibold text-foreground">{selectedNode.label}</h3>
-            <Badge className="mt-2 capitalize">{selectedNode.type}</Badge>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[12px] font-medium" style={{ backgroundColor: `${selectedMeta.color}1a`, color: selectedMeta.color }}><SelectedIcon className="h-3 w-3" />{selectedMeta.label}</span>
+              {selectedTier && <Badge>{selectedTier.label}</Badge>}
+            </div>
             <p className="mt-3 text-[14px] leading-6 text-slate-700">{selectedNode.description || 'This component has no description yet.'}</p>
             <p className="mt-4 border-t pt-3 text-[13px] text-muted-foreground">{architecture.diagram.edges.filter((edge) => edge.source === selectedNode.id || edge.target === selectedNode.id).length} direct connection(s)</p>
           </div> : <div className="py-8 text-center"><MousePointer2 className="mx-auto h-5 w-5 text-slate-300" /><p className="mt-3 text-[14px] leading-6 text-muted-foreground">Click any box in the diagram to read what it does and what it connects to.</p></div>}

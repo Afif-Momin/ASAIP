@@ -2,7 +2,7 @@
 
 ASAIP is a proof-of-concept decision-support platform that turns software requirements into explainable architecture alternatives, technology recommendations, weighted trade-off analysis, cloud cost estimates, scalability scenarios, architecture reviews, evolution roadmaps, and exportable reports.
 
-The application works end-to-end without an API key through a clearly labeled deterministic demo engine. The backend can also use a hosted model through OpenRouter (OpenAI-compatible chat completions) or directly through Anthropic for requirements analysis and architecture generation. `GET /api/config` reports honestly which engine answered, and a selected provider with no key is surfaced as a configuration error rather than silently relabeled as AI output. API keys are never sent to the browser.
+The application works end-to-end without an API key through a clearly labeled deterministic demo engine. The backend can also use a hosted model through OpenRouter (OpenAI-compatible chat completions) or directly through Anthropic for requirements analysis and architecture generation. With one OpenRouter key, ASAIP defaults to **free models** (`recursive/flint-v1.0:free`, cost $0) and automatically tries a configured chain of backup free models if the primary is rate-limited or unavailable. `GET /api/config` reports honestly which engine and model answered, and a selected provider with no key is surfaced as a configuration error rather than silently relabeled as AI output. API keys are never sent to the browser.
 
 ## Problem statement
 
@@ -11,8 +11,8 @@ Early architecture decisions affect delivery speed, operating cost, reliability,
 ## Solution and features
 
 - Structured requirements intake with functional, non-functional, constraint, risk, and missing-information analysis.
-- Three requirements-aware architecture alternatives per project, with technology stacks, trade-offs, costs, and suitability explanations.
-- Dynamic architecture diagrams with component inspection, zoom/pan, fit-to-screen, and image export.
+- Three requirements-aware architecture alternatives per project, with technology stacks, trade-offs, costs, and suitability explanations. With a live provider, each alternative is generated as its own focused model call (run in parallel) so the three options are genuinely different patterns rather than one truncated list.
+- Industry-style layered architecture diagrams: components are grouped into six labelled tiers (client, edge, application, integration, data, operations) with category icons and colours, and typed connections (request/response, async event/queue, data read/write). A backend-owned auto-layout keeps the explorer, SVG, PNG, and PDF renderings identical. Component inspection, zoom/pan, fit-to-screen, a legend, and image export are included.
 - Adjustable seven-criteria weighted decision matrix with ranking, radar/bar charts, and recommendation reasoning.
 - Architecture Critic with severity-rated findings, actionable fixes, and a 0–100 risk score.
 - Illustrative AWS, Azure, and Google Cloud cost estimates in INR, including budget utilization and optimization suggestions.
@@ -147,16 +147,17 @@ Backend variables are documented in `backend/.env.example`.
 |---|---|---|
 | `AI_PROVIDER` | No | `auto` (default), `demo`, `openrouter`, or `anthropic`. `auto` prefers OpenRouter, then Anthropic, then the labelled demo engine. Naming a provider explicitly without its key returns a 503 configuration error instead of falling back quietly. |
 | `OPENROUTER_API_KEY` | No | Enables live AI through OpenRouter's OpenAI-compatible chat completions endpoint. |
-| `OPENROUTER_MODEL` | No | Model identifier, defaults to `openai/gpt-4o-mini`. |
+| `OPENROUTER_MODEL` | No | Primary model identifier, defaults to the free `recursive/flint-v1.0:free`. |
+| `OPENROUTER_FALLBACK_MODELS` | No | Comma-separated free models tried in order when the primary is rate-limited, unavailable, or returns empty output. Defaults to `cohere/north-mini-code:free,openrouter/free`. |
 | `OPENROUTER_BASE_URL` | No | Overrides the OpenRouter endpoint, mainly for proxies and offline testing. |
 | `OPENROUTER_APP_TITLE` / `OPENROUTER_APP_URL` | No | Optional attribution headers sent to OpenRouter. |
 | `ANTHROPIC_API_KEY` | No | Enables live AI through Claude, used when selected directly or when no OpenRouter key exists. |
 | `ANTHROPIC_MODEL` | No | Overrides the configured Claude model. |
-| `AI_MAX_TOKENS` | No | Shared output ceiling for either live provider (1,024–32,000; default 12,000). |
+| `AI_MAX_TOKENS` | No | Shared output ceiling for either live provider (1,024–32,000; default 16,000). Reasoning models spend tokens thinking, so a generous ceiling helps complete diagrams. |
 | `ASAIP_DATABASE_URL` | No | SQLAlchemy database URL; defaults to a local SQLite database. |
 | `ASAIP_CORS_ORIGINS` | No | Comma-separated allowed frontend origins; `localhost:5173` is allowed by default. |
 
-`GET /api/config` reports the live provider, model, and any configuration error, so the UI can label every result honestly.
+`GET /api/config` reports the live provider, model, the automatic fallback-model chain, and any configuration error, so the UI can label every result honestly. Free models are rate-limited and can be slower than paid ones: a full three-option generation typically takes about 1–2 minutes. The generating screen shows the active model, an elapsed-time counter, and a note that backup models are tried automatically, and the frontend allows up to 240 seconds for generation.
 
 Frontend:
 
@@ -223,7 +224,7 @@ cd backend
 python -m pytest -q
 ```
 
-Verified on 4 November 2026: **24 tests passed**. One upstream Starlette deprecation warning is emitted by the installed FastAPI test client dependency; it does not affect the test result.
+Verified on 10 November 2026: **27 tests passed** in about one second with no network access. The suite forces `AI_PROVIDER=demo` and strips any real `OPENROUTER_API_KEY`/`ANTHROPIC_API_KEY` from the environment after config load, so a developer's live key never makes the tests call a paid or rate-limited endpoint. Provider tests cover the per-pattern parallel generation contract, the free-model fallback chain (rate-limit and empty-content fallthrough), adaptive JSON-mode handling, bounded JSON repair, and terminal auth/credit errors. One upstream Starlette deprecation warning is emitted by the installed FastAPI test client dependency; it does not affect the test result.
 
 Frontend production validation:
 
@@ -232,7 +233,7 @@ cd frontend
 npm run build
 ```
 
-Verified on 4 November 2026: TypeScript checking and the Vite production build completed successfully after the interface was redesigned around a light, plain-language theme. Browser walkthroughs covered the new-project wizard, requirements analysis, option generation, the System designs diagrams and SVG/PNG export, rename and delete, Design review, Cost estimate, Growth analysis, Evolution roadmap, and PDF/JSON export, with no console errors. The comparison weights were verified end to end: non-default weights produced exactly the hand-computed scores and ranks, and resetting returned the defaults. A deliberately misconfigured provider (`AI_PROVIDER=openrouter` with no API key) was confirmed to report `ai_configured: false` plus a `provider_error` from `GET /api/config` and to answer analysis requests with HTTP 503 rather than silently falling back to the built-in demo engine.
+Verified on 10 November 2026: TypeScript checking and the Vite production build complete successfully. A live end-to-end run with the free `recursive/flint-v1.0:free` model (cost $0) generated three genuinely different, industry-style alternatives — modular monolith, serverless, and event-driven — each with 16–19 project-specific components across all six tiers, typed connections (request/response, async event/queue, data read/write), and real AWS labels such as CloudFront, Application Load Balancer, Aurora PostgreSQL, ElastiCache Redis, S3, OpenSearch, SQS, Cognito, CloudWatch, Secrets Manager, and Stripe. In the browser, the explorer renders the coloured tier bands, category icons, legend, option cards, and component-details panel with no console errors; the SVG export reproduces every typed connection and tier band from the same component geometry, and the PDF report exports a valid multi-page document containing the layered diagram. The seeded **Smart E-Commerce Platform** fixture was refreshed so it showcases the same tiered diagram style offline in demo mode. Earlier walkthroughs also covered the new-project wizard, rename/delete, Design review, Cost estimate, Growth analysis, Evolution roadmap, and PDF/JSON export; the comparison weights were verified end to end (non-default weights produced exactly the hand-computed scores and ranks, and resetting returned the defaults), and a deliberately misconfigured provider (`AI_PROVIDER=openrouter` with no key) reported `ai_configured: false` plus a `provider_error` and answered analysis requests with HTTP 503 rather than silently falling back to the demo engine.
 
 ## Limitations
 
@@ -240,7 +241,7 @@ Verified on 4 November 2026: TypeScript checking and the Vite production build c
 - Demo mode uses deterministic heuristics and predefined domain knowledge; it does not claim to invoke an AI model. Conversely, a live OpenRouter or Anthropic failure is reported rather than quietly re-labelled as an AI result.
 - Cloud prices are illustrative estimates from configurable assumptions. They are not live quotes and vary by region, usage, taxes, discounts, and provider pricing.
 - Architecture scores support comparison but do not replace load testing, threat modeling, compliance review, or expert engineering judgment.
-- PDF diagrams are simplified report renderings; the interactive explorer provides the full diagram experience.
+- The PDF reproduces the layered diagram (tier bands, typed connections, and component labels) scaled to page width; the interactive explorer adds zoom/pan, fit-to-screen, and per-component inspection.
 - SQLite and the single-user workflow are intentional PoC choices. Authentication, organizations, role-based access, asynchronous jobs, and production observability are out of scope.
 
 ## Future enhancements

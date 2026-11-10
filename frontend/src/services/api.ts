@@ -41,7 +41,7 @@ export const api = {
   },
   architectures: {
     generate: async (projectId: number) =>
-      (await http.post<Architecture[]>(`/api/projects/${projectId}/generate-architectures`)).data,
+      (await http.post<Architecture[]>(`/api/projects/${projectId}/generate-architectures`, {}, { timeout: 240_000 })).data,
     list: async (projectId: number) =>
       (await http.get<Architecture[]>(`/api/projects/${projectId}/architectures`)).data,
     get: async (id: number) => (await http.get<Architecture>(`/api/architectures/${id}`)).data,

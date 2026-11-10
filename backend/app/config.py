@@ -59,7 +59,13 @@ def openrouter_key() -> str | None:
 
 
 def openrouter_model() -> str:
-    return os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini")
+    return os.getenv("OPENROUTER_MODEL", "recursive/flint-v1.0:free")
+
+
+def openrouter_fallback_models() -> list[str]:
+    """Free models tried in order when the primary is rate-limited or unavailable."""
+    raw = os.getenv("OPENROUTER_FALLBACK_MODELS", "cohere/north-mini-code:free,openrouter/free")
+    return [model.strip() for model in raw.split(",") if model.strip()]
 
 
 def openrouter_base_url() -> str:
@@ -68,6 +74,6 @@ def openrouter_base_url() -> str:
 
 def max_output_tokens() -> int:
     try:
-        return max(1024, min(int(os.getenv("AI_MAX_TOKENS", "12000")), 32000))
+        return max(1024, min(int(os.getenv("AI_MAX_TOKENS", "16000")), 32000))
     except ValueError:
-        return 12000
+        return 16000

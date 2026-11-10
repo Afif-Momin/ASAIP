@@ -99,6 +99,7 @@ class DiagramNode(BaseModel):
     type: str = Field(min_length=1, max_length=60)
     description: str = Field(min_length=1, max_length=2000)
     position: Position
+    tier: str | None = Field(default=None, max_length=40)
 
 
 class DiagramEdge(BaseModel):
@@ -107,6 +108,7 @@ class DiagramEdge(BaseModel):
     source: str = Field(min_length=1, max_length=100)
     target: str = Field(min_length=1, max_length=100)
     label: str | None = Field(default=None, max_length=160)
+    kind: str | None = Field(default=None, max_length=20)
 
 
 class Diagram(BaseModel):
@@ -332,6 +334,7 @@ class ConfigResponse(BaseModel):
     ai_provider: Literal["demo", "openrouter", "anthropic"]
     ai_configured: bool
     ai_model: str | None
+    ai_fallback_models: list[str] = Field(default_factory=list)
     provider_error: str | None = None
     currency: Literal["INR"] = "INR"
     supported_providers: list[str]

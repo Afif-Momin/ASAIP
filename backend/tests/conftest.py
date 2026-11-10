@@ -9,9 +9,14 @@ from fastapi.testclient import TestClient
 
 TEST_DIR = Path(tempfile.mkdtemp(prefix="asaip-tests-"))
 os.environ["ASAIP_DATABASE_URL"] = f"sqlite:///{(TEST_DIR / 'test.db').as_posix()}"
-os.environ.pop("ANTHROPIC_API_KEY", None)
+os.environ["AI_PROVIDER"] = "demo"  # baseline; load_dotenv(override=False) keeps this
 
-from app.main import app  # noqa: E402
+from app.main import app  # noqa: E402  (importing app.config runs load_dotenv on backend/.env)
+
+# config.load_dotenv pulls any real keys from backend/.env into the environment. Strip them so the
+# suite stays offline and deterministic; provider tests monkeypatch their own keys per test.
+os.environ.pop("OPENROUTER_API_KEY", None)
+os.environ.pop("ANTHROPIC_API_KEY", None)
 
 
 @pytest.fixture(scope="session")

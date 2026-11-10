@@ -8,6 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from .. import __version__
+from ..config import openrouter_fallback_models
 from ..database import get_db
 from ..models import Architecture, Comparison, Project
 from ..schemas import (
@@ -115,6 +116,7 @@ def public_config() -> ConfigResponse:
         ai_provider=provider_name,
         ai_configured=provider_name != "demo" and not configuration_error,
         ai_model=active_model_name(),
+        ai_fallback_models=openrouter_fallback_models() if provider_name == "openrouter" else [],
         provider_error=configuration_error,
         supported_providers=["AWS", "Azure", "GCP"],
     )

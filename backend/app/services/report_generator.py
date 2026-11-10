@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import math
 from html import escape
 from io import BytesIO
 from typing import Any
 
-from reportlab.graphics.shapes import Drawing, Line, Rect, String
+from reportlab.graphics.shapes import Drawing, Line, Polygon, Rect, String
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import A4
@@ -21,40 +22,121 @@ from reportlab.platypus import (
 
 from ..models import Architecture, Project
 from ..schemas import ComparisonResponse
+from .diagram_vocab import TIER_LABELS, TIER_ORDER
+
+# Palette mirrored in frontend/src/lib/diagram.ts so the PDF matches the explorer and exports.
+_TYPE_COLORS = {
+    "client": "#0d9488", "frontend": "#0891b2", "cdn": "#6366f1", "loadbalancer": "#7c3aed",
+    "gateway": "#8b5cf6", "service": "#2563eb", "function": "#3b82f6", "worker": "#1e40af",
+    "database": "#047857", "cache": "#15803d", "storage": "#059669", "search": "#10b981",
+    "queue": "#ea580c", "external": "#d97706", "monitoring": "#db2777", "secrets": "#e11d48",
+}
+_TIER_TINTS = {
+    "client": "#f0fdfa", "edge": "#f5f3ff", "application": "#eff6ff",
+    "integration": "#fffbeb", "data": "#ecfdf5", "operations": "#fff1f2",
+}
+_TIER_BORDERS = {
+    "client": "#99f6e4", "edge": "#ddd6fe", "application": "#bfdbfe",
+    "integration": "#fde68a", "data": "#a7f3d0", "operations": "#fecdd3",
+}
+_EDGE_COLORS = {"sync": "#64748b", "async": "#ea580c", "data": "#059669"}
+_NODE_W, _NODE_H = 220, 88
 
 
 def _text(value: object) -> str:
     return escape(str(value))
 
 
+def _tint(hex_color: str, factor: float = 0.1) -> colors.Color:
+    r, g, b = (int(hex_color[i : i + 2], 16) for i in (1, 3, 5))
+    return colors.Color(
+        (255 + (r - 255) * factor) / 255,
+        (255 + (g - 255) * factor) / 255,
+        (255 + (b - 255) * factor) / 255,
+    )
+
+
 def _architecture_diagram(architecture: Architecture) -> Drawing:
     nodes = architecture.diagram.get("nodes", [])
-    max_x = max((float(node["position"]["x"]) for node in nodes), default=500)
-    max_y = max((float(node["position"]["y"]) for node in nodes), default=300)
-    width, height = 470, 260
-    sx = (width - 100) / max(max_x, 1)
-    sy = (height - 70) / max(max_y, 1)
-    scale = min(sx, sy, 0.42)
+    edges = architecture.diagram.get("edges", [])
+    width = 485
+    if not nodes:
+        drawing = Drawing(width, 36)
+        drawing.add(String(10, 16, "No diagram components were returned.", fontSize=8, fillColor=colors.HexColor("#64748B")))
+        return drawing
 
-    def xy(node_id: str) -> tuple[float, float]:
-        node = next(item for item in nodes if item["id"] == node_id)
-        return 15 + float(node["position"]["x"]) * scale, height - 35 - float(node["position"]["y"]) * scale
+    xs = [float(node["position"]["x"]) for node in nodes]
+    ys = [float(node["position"]["y"]) for node in nodes]
+    min_x, min_y = min(xs), min(ys)
+    span_x = max(xs) + _NODE_W - min_x
+    span_y = max(ys) + _NODE_H - min_y
+    pad, header = 16, 20
+    scale = min((width - 2 * pad) / span_x, (300 - header - 2 * pad) / span_y, 0.55)
+    draw_w = span_x * scale + 2 * pad
+    draw_h = span_y * scale + header + 2 * pad
+    area_top = pad + span_y * scale
+    node_w, node_h = _NODE_W * scale, _NODE_H * scale
 
-    drawing = Drawing(width, height)
-    drawing.add(Rect(0, 0, width, height, fillColor=colors.HexColor("#F8FAFC"), strokeColor=colors.HexColor("#CBD5E1")))
-    for edge in architecture.diagram.get("edges", []):
-        try:
-            x1, y1 = xy(edge["source"])
-            x2, y2 = xy(edge["target"])
-        except (KeyError, StopIteration):
-            continue
-        drawing.add(Line(x1 + 38, y1, x2 + 38, y2, strokeColor=colors.HexColor("#64748B"), strokeWidth=0.8))
+    def nx(x: float) -> float:
+        return pad + (x - min_x) * scale
+
+    def ny_top(y: float) -> float:
+        return area_top - (y - min_y) * scale
+
+    drawing = Drawing(draw_w, draw_h)
+    drawing.add(Rect(0, 0, draw_w, draw_h, fillColor=colors.white, strokeColor=colors.HexColor("#CBD5E1")))
+
+    groups: dict[str, list] = {}
     for node in nodes:
-        x, y = xy(node["id"])
-        drawing.add(Rect(x, y - 14, 82, 30, rx=4, ry=4, fillColor=colors.HexColor("#E7EFF4"), strokeColor=colors.HexColor("#276582")))
-        drawing.add(String(x + 41, y + 3, str(node["label"])[:20], textAnchor="middle", fontSize=6.2, fillColor=colors.HexColor("#1D2B38")))
-        drawing.add(String(x + 41, y - 7, str(node["type"])[:20], textAnchor="middle", fontSize=5.5, fillColor=colors.HexColor("#475569")))
-    drawing.add(String(12, 10, f"Rendered from {len(nodes)} components and {len(architecture.diagram.get('edges', []))} connections", fontSize=6.5, fillColor=colors.HexColor("#64748B")))
+        groups.setdefault(node.get("tier") or "application", []).append(node)
+    order = [tier for tier in TIER_ORDER if tier in groups] + [tier for tier in groups if tier not in TIER_ORDER]
+    for tier in order:
+        band_x = nx(min(float(node["position"]["x"]) for node in groups[tier]) - 30)
+        band_w = (_NODE_W + 60) * scale
+        drawing.add(Rect(band_x, pad, band_w, span_y * scale, rx=8, ry=8, fillColor=colors.HexColor(_TIER_TINTS.get(tier, "#f8fafc")), strokeColor=colors.HexColor(_TIER_BORDERS.get(tier, "#e2e8f0")), strokeWidth=0.5))
+        drawing.add(String(band_x + 4, area_top + 7, TIER_LABELS.get(tier, tier).upper()[:26], fontSize=5.6, fillColor=colors.HexColor("#475569")))
+
+    by_id = {node["id"]: node for node in nodes}
+    for edge in edges:
+        source, target = by_id.get(edge["source"]), by_id.get(edge["target"])
+        if not source or not target:
+            continue
+        kind = edge.get("kind") if edge.get("kind") in _EDGE_COLORS else "sync"
+        edge_color = colors.HexColor(_EDGE_COLORS[kind])
+        x1 = nx(float(source["position"]["x"]) + _NODE_W)
+        y1 = ny_top(float(source["position"]["y"])) - node_h / 2
+        x2 = nx(float(target["position"]["x"]))
+        y2 = ny_top(float(target["position"]["y"])) - node_h / 2
+        line = Line(x1, y1, x2, y2, strokeColor=edge_color, strokeWidth=0.7)
+        if kind == "async":
+            line.strokeDashArray = [2.5, 1.8]
+        elif kind == "data":
+            line.strokeDashArray = [1, 1.6]
+        drawing.add(line)
+        dx, dy = x2 - x1, y2 - y1
+        dist = math.hypot(dx, dy)
+        if dist > 1:
+            ux, uy = dx / dist, dy / dist
+            ax, ay = 4.2, 2.1
+            drawing.add(Polygon(
+                [x2, y2, x2 - ux * ax - uy * ay, y2 - uy * ax + ux * ay, x2 - ux * ax + uy * ay, y2 - uy * ax - ux * ay],
+                fillColor=edge_color, strokeColor=edge_color, strokeWidth=0.3,
+            ))
+
+    label_size = max(5.0, min(7.0, 14 * scale))
+    type_size = max(4.0, min(5.6, 10 * scale))
+    for node in nodes:
+        color = _TYPE_COLORS.get(node.get("type", ""), "#2563eb")
+        x = nx(float(node["position"]["x"]))
+        y = ny_top(float(node["position"]["y"])) - node_h
+        drawing.add(Rect(x, y, node_w, node_h, rx=3, ry=3, fillColor=_tint(color), strokeColor=colors.HexColor(color), strokeWidth=0.7))
+        drawing.add(Rect(x, y, max(1.4, 3 * scale), node_h, fillColor=colors.HexColor(color), strokeColor=None))
+        max_chars = max(8, int(node_w / (label_size * 0.52)))
+        label = str(node["label"])
+        drawing.add(String(x + node_w / 2 + 1, y + node_h * 0.62, (label[: max_chars - 1] + "…") if len(label) > max_chars else label, textAnchor="middle", fontSize=label_size, fillColor=colors.HexColor("#1D2B38")))
+        drawing.add(String(x + node_w / 2 + 1, y + node_h * 0.26, str(node.get("type", ""))[:max_chars], textAnchor="middle", fontSize=type_size, fillColor=colors.HexColor(color)))
+
+    drawing.add(String(pad, 5, f"{len(nodes)} components · {len(edges)} connections · layers flow left to right", fontSize=5.6, fillColor=colors.HexColor("#64748B")))
     return drawing
 
 
